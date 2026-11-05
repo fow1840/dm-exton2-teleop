@@ -102,6 +102,7 @@ Puppetry 以它为参考 → 目标坐标系漂移。已清除，并在 `stop_te
 - **2026-11-05 23:17 T11 实验条件就绪**：`publish_commanded_ee_state` 改为运行时读参（默认仍 True），现场已置 False 并确认生效（IK pid 79431，备份 `ik_node.py.bak_1105_2316`，md5 `2af30692…`，离线回归 OVERALL PASS）。此改动是 T11 单变量对照的必要前提：原代码启动即缓存参数，`ros2 param set` 不生效。效果待新录包验证。
 - **2026-11-05 23:30 复测观察（口述，无录包）**：T11 条件下按住离合仍会动，但操作员主观判断「幅度小了些」。**幅度未量化、归因未验证**——无法区分是关闭指令 state 的收益还是手静冻结的固有收益。可确认的是：残余移动仍有至少一条未消除的驱动路径。明天需先确认 IK 仍为 pid 79431 且 `publish_commanded_ee_state=False`（进程重启会回 True），再拉 23:17 之后的新包对比。
 - 本轮已按上条部署 ik_node.py（含备份与重启记录，详见 WORKLOG 23:01 与 23:16 条目）；bridge / MessageBridge / Puppetry / FK 未动，未手动下发运动指令。
+- **2026-11-06 离线就绪包（ZCode，未部署）**：bridge 下发计划抽成可离线单测的 `StepPlanner`；T14 迟滞 / T17 `step_base=command` 开环斜坡 / R3 反馈看门狗 / R4 重连清快照 / R10 指令流超时全部实现并过 18 项离线回归（`tools/tests/`，含 hunt 复现与 UBT 下垂教训复现）。默认参数=现行为（`step_base=feedback`），上真机只做「备份→推送→参数 A/B→录包对比」，部署步骤见 TASKS T16。**本地 bridge 已领先远端，推送前必须备份**；分析文档三份在 docs/。
 
 ### 历史阻塞：机器人不跟手（program_run_failed，21:42 快照）
 
