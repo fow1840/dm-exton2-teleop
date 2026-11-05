@@ -76,6 +76,10 @@
 - T19 离线修复：ik_node 离合沿按臂重置（q_commanded/last_velocity/posture 锚）；
   StepPlanner per-arm leash。回归 19/19 OK。TASKS 立 T18（双臂测量，P0）。
 
+- `docs/UBT_URDF对账方法论.md`：UBT URDF-vs-真机 发现/校准全过程回放（七条可迁移
+  规则：真值源先行/权威分级/限位表便宜检查/枚举拟合判可救性/同源重建+双维度回归/
+  X_map 帧标定/数据纪律）；TASKS 立 T20。
+
 ## 当前状态与下一步
 
 - 本地 vs 远端：`tools/exton_bridge.py` **领先远端**（远端仍是 fe58738a 版）；
