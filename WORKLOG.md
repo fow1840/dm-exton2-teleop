@@ -317,3 +317,37 @@ average rate: 250.762
 - 下一步：现场按 T16 部署步骤推 bridge → T14 步骤 1/2 参数 A/B → T15 基线录制 →
   T17 command 模式 A/B。
 - 现场变更：无（未连现场；本地 tools/exton_bridge.py 已领先远端，**推送前必须按 T16 备份**）。
+
+## 2026-11-06 02:2x | 左右臂独立计算溯源分析 + T19 per-arm 修复 | ZCode
+
+- 动作：回放 UBT 决策链（C-001/P-003/P-007/P-016 M2~M5），对照本项目代码逐项核实，
+  产出 docs/左右臂独立计算分析.md；实现两项 per-arm 修复并入离线回归；TASKS 立
+  T18（双臂测量）/T19（per-arm 隔离包）。
+- 证据原文：
+  - UBT 三次「单臂正常、双臂暴露」：C-001 双臂使能发布线程饿出 20~130ms 间隙→剧烈抖动
+    （LEDGER-ARCHIVE C-001）；P-007 四组真机对照定案「双臂轮转挤占单求解线程→周期超限+
+    限速器自激极限环」；P-016 M4.5 基准四档：单臂 3.1ms / 顺序双臂 5.67ms（理论上限
+    176Hz）/ 两线程被 GIL 反拖 101~104Hz / **两进程 253.7Hz**（docs/diagnostics/
+    2026-10-13-pink-m4-5-realtime-fix.md）。
+  - 本项目同构证据：`ik_node.py:386-393`（改前）任一臂离合上升沿
+    `self.q_commanded = self.q_measured.copy(); self.last_velocity.fill(0.0)` 重置两臂
+    全量——与 UBT M2 审查发现同型且更重（UBT 只发现 last_velocity 一半）；
+    ik 目标 250Hz（预算 4ms）< 顺序双臂 5.67ms（同栈基准）→ 双臂同动必掉频（🔍 待 T18 实测）。
+  - 协议连坐：本机 17 维一条 movej = 两臂同程序，整帧拒绝（T12 拒绝 19→59 期间右臂
+    是否同窗停发待回查）。
+  - 右臂零数据：WORKLOG 23:01 明记「右臂未测」，press01~04 与 20 个基线包全为单臂。
+- 改动（本地，未推远端）：
+  - `ik_node.py`：离合上升沿改只重置本臂 `_side_joint_indices(side)` 的
+    q_commanded/last_velocity；posture 锚只锚本臂（另一臂锚保持其按下时的值）；
+  - `exton_bridge.py` StepPlanner：leash 改 per-arm（`_leash_hold` 按臂，超限臂 7 轴
+    冻结在计划值，另一臂照常；全臂超限才整帧冻结）；invalidate 注释明确协议级连坐语义。
+- 回归：test_bridge_offline.py **19/19 OK**（新增 test_leash_per_arm_isolation；修复
+  test_leash_hold_and_release 断言——释放帧 held=6 是 Joint2~7 收敛进 hold 的正确行为）。
+- 结论：UBT 的四类原因（算力/状态耦合/故障隔离/消息语义）在 DM-EXton2 都有对应物；
+  差异是本机协议 17 维一条把隔离上限压低；最大风险=双臂场景零测试。A（进程拆分）
+  等 T18 数据裁定。
+- 未验证：双臂同动实际频率、交叠按下右臂跳变幅度、臂轴 -100 降级行为、修复在真机
+  双臂交叠下的效果。
+- 下一步：T18 四场景测量（右臂首测优先）；T19 随 T16 一起部署（注意重启后
+  publish_commanded_ee_state 回 True，T11 对照需重设）。
+- 现场变更：无（未连现场；本地 ik_node.py 现已领先远端，推前必须备份）。

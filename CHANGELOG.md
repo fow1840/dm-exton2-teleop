@@ -69,6 +69,13 @@
 ### `dfe7238` HANDOFF §四 补离线就绪包结论
 - 一行：离线包就绪状态、默认参数=现行为、**本地 bridge 领先远端，推送前必须备份**。
 
+
+### 本轮追加（2026-11-06，见 WORKLOG 同日条目）
+- `docs/左右臂独立计算分析.md`：UBT per-arm 决策链回放（C-001/P-007/P-016 M4.5 GIL 基准）
+  + DM-EXton2 对照（ik_node 双臂全量重置 bug、250Hz vs 顺序双臂 5.67ms 容量缺口、协议连坐）。
+- T19 离线修复：ik_node 离合沿按臂重置（q_commanded/last_velocity/posture 锚）；
+  StepPlanner per-arm leash。回归 19/19 OK。TASKS 立 T18（双臂测量，P0）。
+
 ## 当前状态与下一步
 
 - 本地 vs 远端：`tools/exton_bridge.py` **领先远端**（远端仍是 fe58738a 版）；

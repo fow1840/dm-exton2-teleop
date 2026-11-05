@@ -385,12 +385,16 @@ class UniversalHumanIK(Node):
         now_s = self.get_clock().now().nanoseconds * 1e-9
         for side in ['left', 'right']:
             if self.clutch[side] and not self.prev_clutch[side]:
-                self.q_commanded = self.q_measured.copy()
-                self.last_velocity.fill(0.0)
+                # 只重置本臂（UBT P-016 M2 审查同款问题的修复）：另一臂可能正在跟
+                # （IK 持续积分、指令领先实测数度），全量重置会让它的指令瞬间跳回
+                # 实测位 → bridge 限幅追认 → 右臂可见地顿/跳一下（双臂交叠按下时）。
+                for idx in self._side_joint_indices(side):
+                    self.q_commanded[idx] = self.q_measured[idx]
+                    self.last_velocity[idx] = 0.0
                 # 姿态任务锚到当前关节角：否则按住期间被持续拉向全零位
-                # （preferred_angles=0），手完全不动关节也会漂（实测Joint7L~150mrad/0.5s）
-                for s in ['left', 'right']:
-                    self.tasks[s]["posture"].set_target(self.q_commanded.copy())
+                # （preferred_angles=0），手完全不动关节也会漂（实测Joint7L~150mrad/0.5s）。
+                # 只锚本臂：另一臂的 posture 锚保持其自己按下时的值，跟中不被扰动。
+                self.tasks[side]["posture"].set_target(self.q_commanded.copy())
                 # 每次按下都走安定等待：Puppetry 起流后 bias 渐进生效（手静时目标
                 # 姿态仍~23°/s自转~1s），必须等安定再锚定；断档>0.2s 的旧目标先作废，
                 # 等第一帧新鲜目标（外骨骼锚=目标流自身，位置+姿态同源，避免与真机

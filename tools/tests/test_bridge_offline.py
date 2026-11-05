@@ -174,17 +174,41 @@ class TestStepPlannerUnit(unittest.TestCase):
         self.assertTrue(plan.updated)
 
     def test_leash_hold_and_release(self):
+        """左臂超 leash：该臂 7 轴冻结（per-arm，非整帧），回带内自动释放。"""
         p = make_planner()
         fb = [0.0] * eb.N_JOINTS
         p.plan(fb, ik_map_left([0.3, 0, 0, 0, 0, 0, 0]), **T17_COMMAND)
         cmd1 = p._command[eb.IDX_LEFT_START]      # 注意 max_step 会把 0.3 截到 0.2
         fb[eb.IDX_LEFT_START] = cmd1 + 0.7        # 偏离计划 0.7 > leash 0.6
         plan = p.plan(fb, ik_map_left([0.3, 0, 0, 0, 0, 0, 0]), **T17_COMMAND)
-        self.assertTrue(plan.leash_hold)
+        self.assertFalse(plan.leash_hold)         # 仅左臂超限 → 非整帧语义
+        self.assertEqual(plan.held, 7)            # 左臂 7 轴全部冻结
         self.assertFalse(plan.updated)
         fb[eb.IDX_LEFT_START] = cmd1 + 0.35       # 回到 0.8×leash 内 → 释放
         plan = p.plan(fb, ik_map_left([0.3, 0, 0, 0, 0, 0, 0]), **T17_COMMAND)
         self.assertFalse(plan.leash_hold)
+        self.assertTrue(plan.updated)             # Joint1L 恢复步进
+        self.assertEqual(plan.held, 6)            # Joint2~7 已收敛，按迟滞正常进 hold
+
+    def test_leash_per_arm_isolation(self):
+        """左臂超限冻结时右臂照常跟随（UBT ArmSafetyGate×2 隔离语义）。"""
+        p = make_planner()
+        fb = [0.0] * eb.N_JOINTS
+        ik = {n: v for n, v in zip(eb.LEFT_URDF_JOINTS, [0.3, 0, 0, 0, 0, 0, 0])}
+        ik.update({n: v for n, v in zip(eb.RIGHT_URDF_JOINTS, [0.1, 0, 0, 0, 0, 0, 0])})
+        p.plan(fb, ik, **T17_COMMAND)
+        cmd_l = p._command[eb.IDX_LEFT_START]
+        cmd_r = p._command[eb.IDX_RIGHT_START]
+        # 左臂被拖远（超限），右臂正常移动到新目标
+        fb[eb.IDX_LEFT_START] = cmd_l + 0.7
+        fb[eb.IDX_RIGHT_START] = cmd_r            # 右臂已到位
+        ik2 = dict(ik)
+        ik2[eb.RIGHT_URDF_JOINTS[0]] = 0.2
+        plan = p.plan(fb, ik2, **T17_COMMAND)
+        self.assertTrue(plan.updated)             # 右臂正常更新
+        self.assertEqual(plan.joints[eb.IDX_LEFT_START], cmd_l)  # 左臂冻结在计划值
+        self.assertAlmostEqual(plan.joints[eb.IDX_RIGHT_START],
+                               cmd_r + min(0.1, 0.20), places=12)
 
     def test_invalidate_rebases(self):
         """指令被拒后 invalidate：下一帧重新以 fb 估（有限重试，防持续 hunt）。"""

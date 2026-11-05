@@ -170,17 +170,20 @@ class StepPlanner:
         self.n_joints = n_joints
         self._held = [False] * n_joints   # 每轴迟滞锁
         self._command = None              # 上一拍计划值（command 模式斜坡底）
-        self._leash_hold = False
+        # per-arm leash 锁（UBT ArmSafetyGate×2 同款：单臂超限不连坐另一臂）
+        self._leash_hold = [False] * len(arms)
 
     def reset(self):
         """会话级复位：同步/重连/离合语义变化后调用。"""
         self._held = [False] * self.n_joints
         self._command = None
-        self._leash_hold = False
+        self._leash_hold = [False] * len(self.arms)
 
     def invalidate(self):
         """指令被控制器拒绝后调用：强制下一帧以反馈重估（有限次重试，防持续 hunt）。
-        hold 锁一并清除：拒绝说明上一条没生效，锁着会让重试发不出去。"""
+        hold 锁一并清除：拒绝说明上一条没生效，锁着会让重试发不出去。
+        注：本协议 17 维一条 movej，拒绝是整帧语义，无法定位到臂——leash 锁保留
+        （超限臂继续冻结），迟滞锁全清（重试需要）。"""
         self._command = None
         self._held = [False] * self.n_joints
 
@@ -193,19 +196,24 @@ class StepPlanner:
             base = self._command
         joints = list(fb)
 
-        # leash：计划值与实测偏离超限 → 整帧冻结（command 模式专用护栏）。
+        # leash：计划值与实测偏离超限 → 该臂冻结（command 模式专用护栏）。
+        # per-arm：单臂超限只冻结该臂 7 轴，另一臂照常（UBT ArmSafetyGate×2 同款）。
         # 带滞回：超 leash_rad 锁存，回到 0.8×leash 内才释放，避免边界抖动。
+        leash_arms = set()
         if step_base == 'command' and self._command is not None:
-            worst = max(
-                abs(self._command[idx] - fb[idx])
-                for names, limits, start, enabled in self.arms if enabled
-                for idx in range(start, start + ARM_DOF)
-            )
-            if worst > leash_rad:
-                self._leash_hold = True
-            elif worst < 0.8 * leash_rad:
-                self._leash_hold = False
-            if self._leash_hold:
+            for ai, (names, limits, start, enabled) in enumerate(self.arms):
+                if not enabled:
+                    continue
+                worst = max(abs(self._command[idx] - fb[idx])
+                            for idx in range(start, start + ARM_DOF))
+                if worst > leash_rad:
+                    self._leash_hold[ai] = True
+                elif worst < 0.8 * leash_rad:
+                    self._leash_hold[ai] = False
+                if self._leash_hold[ai]:
+                    leash_arms.add(ai)
+            if len(leash_arms) == sum(1 for a in self.arms if a[3]):
+                # 全部使能臂都超限：整帧冻结（保留原「整帧」日志语义）
                 return FramePlan(joints, updated=False, leash_hold=True)
 
         updated = False
@@ -214,14 +222,20 @@ class StepPlanner:
         max_step_abs = 0.0
         max_err_abs = 0.0
 
-        for names, limits, start, enabled in self.arms:
+        for ai, (names, limits, start, enabled) in enumerate(self.arms):
             if not enabled:
                 continue
+            arm_leash = ai in leash_arms
             for i, (uname, (lo, hi)) in enumerate(zip(names, limits)):
                 if uname not in name_to_pos:
                     continue
                 ik_val = clip(name_to_pos[uname], lo, hi)
                 idx = start + i
+                if arm_leash:
+                    # 本臂超 leash：该臂 7 轴保持计划值不喂纠偏，另一臂照常
+                    joints[idx] = base[idx]
+                    held += 1
+                    continue
                 err = ik_val - base[idx]
                 max_err_abs = max(max_err_abs, abs(err))
                 if ik_moved:
