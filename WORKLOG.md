@@ -244,3 +244,26 @@ average rate: 250.762
 - 下一步：按分析文档第四节顺序——T11 补录包复测 与 T12 日志对齐并重；T13 可并行。
 - 现场变更：无（纯离线分析 + 本地 git；未连真机、未改远端文件）。git 提交两笔：
   快照基线 + 本次台账/分析（含 23:30 现场 Codex 条目一并入库）。
+
+## 2026-11-06 00:4x | exton_bridge.py 信号流专项分析 | ZCode
+
+- 动作：核对仓库内三份 bridge 拷贝（md5）→ 尝试建隧道核对远端真身（失败）→ 通读
+  tools/exton_bridge.py（775 行）与阻塞版备份，产出 docs/exton_bridge_信号流分析.md
+  （线程/锁模型、下发/反馈双向生命周期、参数表、风险清单 R1~R7、版本演进）。
+- 证据原文：
+  - `md5sum`：tools/exton_bridge.py = `fe58738accb7bd416f5dd59ce95307f4`（775 行）；
+    tools/exton_bridge.py.bak_blocking_1105_1854 = ros2_ws/scripts/exton_bridge.py =
+    `d750d22bec3b1d909cf0fb93f170bab6`（624 行，两文件逐字节相同）。
+  - 隧道尝试：`sshpass -p 'DMdaNto' ssh … ubuntu@192.168.26.250` →
+    `kex_exchange_identification: Connection closed by remote host`，nc 2222 不通。
+  - 阻塞版关键行：`create_timer(1.0/fb_hz, self._poll_and_query)`（备份 315 行）+
+    `poll_recv` 内 `sock.recv`（166/173 行）——反馈 6.6Hz 根源与 docstring 自述一致；
+    `_flush_commands` 的 fb 底步进内核两版相同。
+- 结论：bridge 同时是协议网关/限速整形器/第二闭环控制器；R1（纠偏 hunt）与 R2（ack
+  语义未定）为 P0 待验证项；R3（反馈无新鲜度看门狗）、R4（重连可能用陈旧快照同步）
+  为新发现（代码实证，现实暴露未验证）。所有「目标=Q_ik（|err|≤0.2rad 时）」推理已由
+  apply_arm 代码锚定（581-592 行）。
+- 未验证：远端 md5、现场 command_rate_hz/control_mode 实际值、ack=受理或完成、
+  单条 movej 过冲量、反馈停更是否发生过。
+- 下一步：现场先跑参数核对命令（分析文档第七节末）再动 T14；T12 台架一锤定音 R2。
+- 现场变更：无（未连现场；仅本地新增 docs/exton_bridge_信号流分析.md 并入库）。
