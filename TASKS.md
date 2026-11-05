@@ -184,19 +184,28 @@
   第四节三方案中选定一方案。
 - 风险：注入 state 会同时被 MessageBridge 转发，确认 bridge 已停、真机侧无命令下发。
 
-### T14 bridge hold+迟滞（防纠偏 hunt，机制③修法，条件触发）
+### T14 bridge hold+迟滞（防纠偏 hunt，机制③修法）——离线已完成，待真机验证
 
 - 优先级：P1（T12 确认 bridge 驱动后升 P0）
-- 状态：`TODO`（先等 T11 复测 / T12 判别，避免多变量同时动）
-- 位置：`tools/exton_bridge.py` `_flush_commands`（eps 判定处，第 587 行附近）
-- 说明：当前 `command_eps_rad=0.001rad(0.057°)` 远小于 movej 到位能力，导致持续纠偏。
-  加迟滞：|err|<0.01rad 认为到位停发；|err|>0.03~0.05rad 或 IK 指令变化才恢复发。
-  同思路出处：UBT P-007 用死区打破「限速器自激极限环」。
-  **UBT 实测教训（pink_bridge_safety.hpp:106-115，须遵守）**：保持/停发语义若退化为
-  「周期重发当前实测位」会复现其 2026-10-13 回归——零位置误差→零保持力矩→重力下拉→
-  命令追着下垂走→手臂缓慢下垂。**保持值必须是冻结的最后指令，严禁实时实测位。**
-- 验收：手静冻结窗内 `movej_tx` 停止增长；J1 振荡消失；跟手段延迟无可感知劣化。
-- 风险：改实时发送路径，改前备份远端原文件；先离线模拟 fb 动力学回归。
+- 状态：`DOING`（ZCode，2026-11-06；代码+离线回归完成，见 WORKLOG 同日条目，**真机未验证**）
+- 需求：`command_eps_rad=0.001rad(0.057°)` 远小于 movej 到位能力 → IK 冻结后 bridge 持续
+  纠偏（hunt，机制③/R1）。加迟滞：|err|≤`hold_enter_rad`(0.01) 该轴停发；目标重新活动
+  （`ik_move_eps_rad=0.002`）或 |err|>`hold_rearm_rad`(0.05) 才恢复。
+  **UBT 实测教训（pink_bridge_safety.hpp:106-115，已按其实现）**：保持值必须是冻结的
+  最后指令/计划，严禁退化为「周期重发当前实测位」——否则复现其 2026-10-13 下垂回归。
+- 离线证据（tools/tests/test_bridge_offline.py，18/18 OK）：
+  - `test_a2_hysteresis_works_for_small_overshoot`：过冲 0.005 < enter → ≤2 拍停发 ✅
+  - `test_a1_hysteresis_insufficient_for_big_overshoot`：**过冲 0.035 ≥ enter 时 err 恒带外，
+    迟滞不足仍 hunt（≥45/50 拍在发）**——文档化边界：根治靠 T17 command 底
+  - `test_c_following_not_blocked_by_hold`：目标持续变化时 20/20 拍全发，迟滞不卡跟随 ✅
+- 真机验证步骤（配合 T16 部署后）：
+  1. 基线等价：`ros2 param set /exton_bridge hold_enter_rad 0.001`（≈旧行为）→ 按住离合
+     手静 8s×2，确认行为与改前一致；
+  2. 开迟滞：`hold_enter_rad 0.01` / `hold_rearm_rad 0.05` → 同场景录包，判据：
+     手静窗 `movej_tx` 停止增长、J1L 振荡（±2.2~2.9°/1s）幅度下降或消失；
+  3. 对比 `press01_left_230820.npz` 同判据数据写 WORKLOG。
+- 参数（运行时可 `ros2 param set` A/B，不重启）：`hold_enter_rad`/`hold_rearm_rad`/
+  `ik_move_eps_rad`。风险：改实时发送路径；改前必须备份远端原文件（见 T16 步骤）。
 
 ### T15 端到端滞后与运动平滑度量化（跟手性基线测量，先测后调）
 
@@ -208,23 +217,63 @@
   ② 指令/反馈的 stop-go 周期（movej 程序节奏）；
   ③ 有效指令率（sent 增量 ÷ 时间窗）；
   ④ 快动时 IK 指令与真机的最大关节滞后。
-- 验收：四个数字写入 WORKLOG（含包名），作为 T14/A1 改造前后的对照基线。
+- 验收：四个数字写入 WORKLOG（含包名），作为 T14/T17 改造前后的对照基线。
 - 负责：AI 分析 + 人工操作
 
-### T17 bridge 下发语义对齐 UBT（开环斜坡 + leash + fault latch，条件触发）
+### T16 bridge 健壮性加固 + 离线回归框架（R3/R4/R10）——离线已完成，待部署
 
-- 优先级：P2（跟手性根治候选，依赖 T15 基线 + T14 稳定）
-- 状态：`TODO`
-- 位置：`tools/exton_bridge.py` `_flush_commands`
-- 说明（详见 docs/exton_bridge_对比UBT与优化路线.md §四/§五 A1）：
-  ① 步进底从真机反馈 fb 改为 `_last_sent_joint`（开环匀速斜坡，UBT
-  `pink_bridge_safety.hpp:172-179` 同款），到位判据改为 `|target−command|`
-  （与反馈无关，hunt 从根上消失）；
-  ② 加指令-实测 leash 0.6rad + fault latch（离合循环解除）+ 输入超时 0.5s；
-  ③ fb 退化为 leash 监控与反馈看门狗数据源。
-- 前置：T15 基线数据；T14 已上线；离线回归（仿 UBT test_pink_bridge_safety 写 pytest）。
+- 优先级：P1
+- 状态：`DOING`（ZCode，2026-11-06；本地代码与测试完成，**未推远端**）
+- 需求：
+  - R3 反馈新鲜度看门狗：控制器停回应答但 TCP 存活时，陈旧 fb 被当纠偏底、全链真值源
+    失真 → `feedback_timeout_s`(1.0) 内无新反馈即停发+告警；
+  - R4 重连陈旧快照：`connect()` 清空 `_latest_joint_rad/_ts`，重连后同步必等新应答；
+  - R10 指令流活性：IK 挂死（HANDOFF §五前科）时 rx 计数停止 → `command_timeout_s`(1.0)
+    停发+告警（判据用 rx 计数非消息内容：手静时 IK 仍发同值，流活着）；
+  - 结构改造：下发计划抽成纯逻辑类 `StepPlanner`（无 ROS/socket，可离线单测），
+    `_flush_commands` 变门禁+副作用薄壳；控制语义参数每帧实时读（T11 教训：启动缓存
+    会让现场单变量对照变成重启对照）。
+- 离线证据：`test_reconnect_drops_stale_snapshot` ✅ / `test_sync_and_feedback_age` ✅ /
+  `test_lockstep_accept_mode_high_rate`（受理即回：10/10 全发）✅ /
+  `test_lockstep_complete_mode_paced_and_rejects_overlap`（执行完才回：300ms 超时触发、
+  重叠拒绝发生——R2 两种语义的行为刻画，供 T12 现场对照）✅
+- **真机部署步骤（改远端前必须备份）**：
+  ```bash
+  # 1) 备份
+  sshpass -p ' ' ssh -p 2222 tc@127.0.0.1 \
+    'cp /home/tc/tcvg/exton_bridge.py /home/tc/tcvg/exton_bridge.py.bak_$(date +%m%d_%H%M)'
+  # 2) 推送
+  sshpass -p ' ' scp -P 2222 tools/exton_bridge.py tc@127.0.0.1:/home/tc/tcvg/exton_bridge.py
+  # 3) 重启 T3（参数与 start_teleop.sh 一致，见 AGENTS §3；先 pgrep 拼接防自杀）
+  # 4) 验证：connected/fb_synced 正常、md5sum 与本地一致、
+  #    按住离合慢动 → sent 增长、拒绝不新增、手静表现与改前一致（默认参数=旧行为）
+  ```
+  新参数默认值不改变现行为（`step_base=feedback`），迟滞默认开启但可用
+  `hold_enter_rad 0.001` 退化为旧行为——现场先跑 1 验证等价再开 2。
+- 验收：WORKLOG 记录远端 md5、重启后状态行、按住离合慢动的 sent/拒绝计数、
+  手静窗对比；离线回归在推送前重跑一次全绿。
+
+### T17 bridge 下发语义对齐 UBT（step_base=command 开环斜坡）——离线已完成，待真机 A/B
+
+- 优先级：P2（跟手性根治候选，依赖 T15 基线 + T16 部署）
+- 状态：`DOING`（ZCode，2026-11-06；`step_base` 参数门控已实现并离线回归，**默认 feedback**
+  即现行为，真机 A/B 只是 `ros2 param set`，无需再改代码）
+- 说明（详证 docs/exton_bridge_对比UBT与优化路线.md §四/§五）：
+  `step_base=command` 时步进底=上一拍计划值（开环斜坡），到位判据 `|IK−计划|` 与反馈
+  无关 → 收敛即停发，hunt 从构造上消失；配套 `tracking_leash_rad`(0.6) 指令-实测偏离
+  护栏（超限整帧冻结，0.8×leash 内自动恢复）+ 拒绝时 `invalidate()` 有限重试
+  （否则指令被拒后桥会认为已收敛而不补发）。
+- 离线证据（test_bridge_offline.py）：
+  - `test_a3_command_mode_immune_to_big_overshoot`：2° 过冲下 ≤2 拍停发（feedback 底为 ≥45）✅
+  - `test_b_sag_model_feedback_hunts_command_stops`：UBT 下垂模型，feedback 底 ≥45 拍
+    「追着下垂走」、command 底 ≤2 拍停——复现 UBT 实测教训 ✅
+  - `test_command_mode_ramp_from_last_plan`：0.5rad 目标 3 拍斜坡收敛（0.2/拍）✅
+  - `test_invalidate_rebases`：拒绝后重估重试 ✅
+- 真机验证步骤：T15 基线录完后 `ros2 param set /exton_bridge step_base command` →
+  同场景录包对比：端到端滞后、stop-go 周期、手静窗 movej_tx、拒绝计数；
+  异常即 `step_base feedback` 回滚（不重启）。
 - 验收：跟手段端到端滞后较 T15 基线显著下降；手静窗零纠偏帧；无新增拒绝。
-- 风险：动的是下发核心语义，必须单变量、可回滚、有真机窗口时一次集中验收。
+- 风险：动的是下发核心语义；leash/invalidate 行为已离线覆盖，真机异常直接参数回滚。
 
 ## 三、别接的活（明确出界）
 

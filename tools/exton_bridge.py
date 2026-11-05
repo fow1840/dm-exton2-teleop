@@ -121,6 +121,139 @@ def extract_joint_rad(msg: dict) -> Optional[List[float]]:
     return None
 
 
+class FramePlan:
+    """一帧下发计划的结果（纯数据，便于离线断言）。"""
+
+    __slots__ = (
+        'joints', 'updated', 'skipped', 'held', 'leash_hold',
+        'max_step_abs', 'max_err_abs',
+    )
+
+    def __init__(self, joints, updated, skipped=0, held=0, leash_hold=False,
+                 max_step_abs=0.0, max_err_abs=0.0):
+        self.joints = joints
+        self.updated = updated
+        self.skipped = skipped
+        self.held = held
+        self.leash_hold = leash_hold
+        self.max_step_abs = max_step_abs
+        self.max_err_abs = max_err_abs
+
+
+class StepPlanner:
+    """一帧 17 维下发计划的纯逻辑（无 ROS / 无 socket，可离线单测）。
+
+    为什么抽出来：hunt / 迟滞 / 步进底的控制语义必须能在不连真机的条件下回归
+    （UBT P-007 教训：先离线复现，再上真机单变量验证）。本桥历史上两次事故
+    （阻塞版 6.6Hz 反馈滞后、异步版 50Hz 连发拒绝风暴）的共同点是
+    「控制语义改了，但验证只能上真机」。
+
+    step_base 两种步进底（对应 docs/exton_bridge_对比UBT与优化路线.md）：
+      'feedback'（默认，与历史行为逐位一致）：err = IK − 真机反馈 fb，
+        目标 = fb + clip(err)。以反馈为底的闭环纠偏。若 movej 的实际到位能力
+        差于 eps，|err| 永远压不进 eps → 持续纠偏（hunt，机制③/R1）。
+      'command'（UBT pink_bridge_safety.hpp 同款）：err = IK − 上一拍计划值，
+        目标 = 计划值 + clip(err)。开环斜坡，到位判据 |IK−计划| 与反馈无关 →
+        收敛即停发，hunt 从构造上消失；反馈只用于 leash 监控（计划与实测偏离
+        超限 → 整帧保持，防失真反馈/重力下垂被追——UBT 2026-10-13 实测回归：
+        保持值若用实时实测位，命令会追着下垂走）。
+
+    hold 迟滞（两模式通用，抑制噪声级微动）：|err| ≤ hold_enter 后该轴停发，
+    直至目标重新活动（ik_moved）或 |err| > hold_rearm。
+    ⚠️ 离线仿真结论：若真机单条 movej 过冲幅度 ≥ hold_rearm，feedback 模式下
+    迟滞不足以止 hunt（err 始终在带外）；彻底解法是 step_base='command'。
+    """
+
+    def __init__(self, arms, n_joints=N_JOINTS):
+        # arms: [(urdf_names, limits, start_idx, enabled), ...]，与 _flush_commands 原结构一致
+        self.arms = arms
+        self.n_joints = n_joints
+        self._held = [False] * n_joints   # 每轴迟滞锁
+        self._command = None              # 上一拍计划值（command 模式斜坡底）
+        self._leash_hold = False
+
+    def reset(self):
+        """会话级复位：同步/重连/离合语义变化后调用。"""
+        self._held = [False] * self.n_joints
+        self._command = None
+        self._leash_hold = False
+
+    def invalidate(self):
+        """指令被控制器拒绝后调用：强制下一帧以反馈重估（有限次重试，防持续 hunt）。
+        hold 锁一并清除：拒绝说明上一条没生效，锁着会让重试发不出去。"""
+        self._command = None
+        self._held = [False] * self.n_joints
+
+    def plan(self, fb, name_to_pos, *, step_base='feedback',
+             eps_rad=0.001, jump_rad=3.0, max_step_rad=0.20, follow_ratio=1.0,
+             hold_enter_rad=0.01, hold_rearm_rad=0.05, leash_rad=0.6,
+             ik_moved=False):
+        base = fb
+        if step_base == 'command' and self._command is not None:
+            base = self._command
+        joints = list(fb)
+
+        # leash：计划值与实测偏离超限 → 整帧冻结（command 模式专用护栏）。
+        # 带滞回：超 leash_rad 锁存，回到 0.8×leash 内才释放，避免边界抖动。
+        if step_base == 'command' and self._command is not None:
+            worst = max(
+                abs(self._command[idx] - fb[idx])
+                for names, limits, start, enabled in self.arms if enabled
+                for idx in range(start, start + ARM_DOF)
+            )
+            if worst > leash_rad:
+                self._leash_hold = True
+            elif worst < 0.8 * leash_rad:
+                self._leash_hold = False
+            if self._leash_hold:
+                return FramePlan(joints, updated=False, leash_hold=True)
+
+        updated = False
+        skipped = 0
+        held = 0
+        max_step_abs = 0.0
+        max_err_abs = 0.0
+
+        for names, limits, start, enabled in self.arms:
+            if not enabled:
+                continue
+            for i, (uname, (lo, hi)) in enumerate(zip(names, limits)):
+                if uname not in name_to_pos:
+                    continue
+                ik_val = clip(name_to_pos[uname], lo, hi)
+                idx = start + i
+                err = ik_val - base[idx]
+                max_err_abs = max(max_err_abs, abs(err))
+                if ik_moved:
+                    # 目标在动 = 在跟手：清锁且本拍不做 enter 判定，
+                    # 否则慢速跟随时 err 恰好落在 enter 带内会被反复卡住
+                    self._held[idx] = False
+                elif self._held[idx]:
+                    if abs(err) > hold_rearm_rad:
+                        self._held[idx] = False
+                    else:
+                        joints[idx] = base[idx]
+                        held += 1
+                        continue
+                if not ik_moved and abs(err) <= hold_enter_rad:
+                    self._held[idx] = True
+                    joints[idx] = base[idx]
+                    held += 1
+                    continue
+                if abs(err) > jump_rad:
+                    skipped += 1
+                    continue
+                step = clip(err * follow_ratio, -max_step_rad, max_step_rad)
+                joints[idx] = base[idx] + step
+                max_step_abs = max(max_step_abs, abs(step))
+                updated = True
+
+        if updated:
+            self._command = list(joints)
+        return FramePlan(joints, updated=updated, skipped=skipped, held=held,
+                         max_step_abs=max_step_abs, max_err_abs=max_err_abs)
+
+
 class AsyncTcpClient:
     """协议 V0.3 异步客户端：收发各自独立线程，ROS 回调零阻塞。
 
@@ -141,6 +274,7 @@ class AsyncTcpClient:
         self._send_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._latest_joint_rad: Optional[List[float]] = None
+        self._latest_joint_ts: Optional[float] = None  # 单调钟，反馈新鲜度看门狗用
         self._responses: collections.deque = collections.deque(maxlen=64)
         self._rx_buffer = ''
         self._rx_thread: Optional[threading.Thread] = None
@@ -174,6 +308,11 @@ class AsyncTcpClient:
         sock.settimeout(None)
         self._sock = sock
         self._rx_buffer = ''
+        # R4：断线重连后必须丢掉旧连接的反馈快照，否则 _maybe_sync 可能用
+        # 「断线前」的关节角当下发基线（机器人若在断线期间被人为动过，首帧纠偏
+        # 基线就是错的）。清空后同步会等控制器真正回一条新应答。
+        self._latest_joint_rad = None
+        self._latest_joint_ts = None
         self._last_error = None
         self._closing = False
         self._connected = True
@@ -240,6 +379,13 @@ class AsyncTcpClient:
             if self._latest_joint_rad is None:
                 return None
             return list(self._latest_joint_rad)
+
+    def get_feedback_age(self) -> Optional[float]:
+        """最近一次反馈快照的年龄（秒）；从未收到过反馈时返回 None。"""
+        with self._state_lock:
+            if self._latest_joint_ts is None:
+                return None
+            return time.monotonic() - self._latest_joint_ts
 
     def get_movej_lock_stats(self) -> tuple:
         """返回 movej 实际发送/应答/超时计数，用于现场验证 lock-step。"""
@@ -375,6 +521,7 @@ class AsyncTcpClient:
                 joints = extract_joint_rad(msg)
                 if joints is not None and len(joints) >= N_JOINTS:
                     self._latest_joint_rad = joints[:N_JOINTS]
+                    self._latest_joint_ts = time.monotonic()
                 elif joints is not None and len(joints) >= IDX_RIGHT_START + ARM_DOF:
                     # 容错：不足 17 时也尽量用
                     padded = [HOLD] * N_JOINTS
@@ -382,6 +529,7 @@ class AsyncTcpClient:
                         if i < N_JOINTS:
                             padded[i] = v
                     self._latest_joint_rad = padded
+                    self._latest_joint_ts = time.monotonic()
 
 
 class ExtonBridge(Node):
@@ -415,6 +563,25 @@ class ExtonBridge(Node):
         self.declare_parameter('follow_ratio', 1.0)
         # 调试：打印每次下发与 TCP 应答
         self.declare_parameter('debug_tcp', False)
+        # ---- 以下为 2026-11-06 离线加固/优化参数（均可在运行中 ros2 param set 做 A/B，
+        # ---- 不重启进程；控制语义类参数每帧实时读，T11 的教训：启动缓存会让现场
+        # ---- 单变量对照变成重启变量对照）----
+        # 步进底：feedback=以真机反馈为底的闭环纠偏（历史行为，有 hunt 风险）；
+        #         command=以上一拍计划值为底的开环斜坡（UBT 同款，hunt 从构造上消失）。
+        #         默认保持 feedback，待 T15 基线后真机 A/B（T17）。
+        self.declare_parameter('step_base', 'feedback')
+        # hold 迟滞：|err|≤enter 该轴停发，目标重新活动或 |err|>rearm 才恢复（T14）。
+        # 注意：若真机单条 movej 过冲 ≥ rearm，feedback 模式下迟滞不足，需 step_base=command。
+        self.declare_parameter('hold_enter_rad', 0.01)
+        self.declare_parameter('hold_rearm_rad', 0.05)
+        # command 模式护栏：计划值与实测偏离超 leash → 整帧冻结（UBT 0.6rad 同款）
+        self.declare_parameter('tracking_leash_rad', 0.6)
+        # R3：反馈新鲜度看门狗——反馈停更超此值即停发（防拿陈旧 fb 持续纠偏）
+        self.declare_parameter('feedback_timeout_s', 1.0)
+        # R10：指令流活性超时——IK 停发（rx 计数不变）超此值即停发
+        self.declare_parameter('command_timeout_s', 1.0)
+        # IK 目标活动判定阈：目标变化超此值视为「在动」，清 hold 锁恢复跟随
+        self.declare_parameter('ik_move_eps_rad', 0.002)
 
         host = str(self.get_parameter('controller_host').value)
         port = int(self.get_parameter('controller_port').value)
@@ -438,8 +605,9 @@ class ExtonBridge(Node):
         self._fb_synced = False
         self._last_status_log = 0.0
         self._jump_warn_count = 0
-        self._last_skip_reason = ''  # jump | nodelta | none
+        self._last_skip_reason = ''  # jump | nodelta | leash | fbstale | cmdstale | none
         self._skipped_last = 0
+        self._last_warn_t = 0.0
 
         if self.control_mode not in ('movej_canfd', 'movej'):
             raise RuntimeError("control_mode 只能是 'movej_canfd' 或 'movej'")
@@ -456,6 +624,19 @@ class ExtonBridge(Node):
         self._cmd_lock = threading.Lock()
         self._pending_cmd: Optional[JointState] = None
         self._last_sent_joint: Optional[List[float]] = None
+
+        # 下发计划纯逻辑（可离线单测），桥本体只做门禁与副作用
+        self._planner = StepPlanner(
+            [
+                (LEFT_URDF_JOINTS, self.left_limits, IDX_LEFT_START, self.enable_left),
+                (RIGHT_URDF_JOINTS, self.right_limits, IDX_RIGHT_START, self.enable_right),
+            ],
+        )
+        # R10 指令流活性跟踪：_cmd_rx_count 停止增长超时 → 停发
+        self._rx_seen_count = 0
+        self._rx_seen_t = time.monotonic()
+        # IK 目标活动检测：与上一帧 IK 值逐轴比较
+        self._last_ik_pos: dict = {}
 
         # 17 维模板：非控制轴 -100；右臂用档案 home 作初值（弧度）
         self._joint_cmd = [HOLD] * N_JOINTS
@@ -532,6 +713,8 @@ class ExtonBridge(Node):
             with self._cmd_lock:
                 self._pending_cmd = None
             self._fb_synced = True
+            # 新会话新基线：迟滞锁/斜坡历史全部作废
+            self._planner.reset()
             self.get_logger().info(
                 '已用 get_joint_position 同步内部关节缓存，开始允许下发 | '
                 f'R0={self._joint_cmd[IDX_RIGHT_START]:.3f} '
@@ -546,6 +729,13 @@ class ExtonBridge(Node):
             self._pending_cmd = msg
             self._cmd_rx_count += 1
 
+    def _warn_throttled(self, text: str) -> None:
+        """2s 节流告警：看门狗类告警每帧触发会刷屏日志。"""
+        now_m = time.monotonic()
+        if now_m - self._last_warn_t >= 2.0:
+            self._last_warn_t = now_m
+            self.get_logger().warn(text)
+
     def _flush_commands(self) -> None:
         with self._cmd_lock:
             msg = self._pending_cmd
@@ -554,58 +744,82 @@ class ExtonBridge(Node):
         if msg is None or not self.tcp.connected or not self._fb_synced:
             return
 
+        # R3 反馈新鲜度看门狗：控制器停回应答但 TCP 存活时，陈旧 fb 会被当纠偏底
+        # （反馈链是全系统唯一真值源），停发并告警；state 发布照旧不动下游语义。
+        fb_timeout = float(self.get_parameter('feedback_timeout_s').value)
+        fb_age = self.tcp.get_feedback_age()
+        if fb_age is not None and fb_age > fb_timeout:
+            self._last_skip_reason = 'fbstale'
+            self._warn_throttled(
+                f'反馈停更 {fb_age:.2f}s（>{fb_timeout:.1f}s），暂停下发；'
+                '请检查控制器连接与 get_joint_position 应答'
+            )
+            return
+
+        # R10 指令流活性：判据用 rx 计数而非消息内容——手静时 IK 仍 250Hz 发同值，
+        # 内容不变但流活着；IK 挂死（HANDOFF §五前科）时计数停止 → 停发。
+        cmd_timeout = float(self.get_parameter('command_timeout_s').value)
+        now_m = time.monotonic()
+        if self._cmd_rx_count != self._rx_seen_count:
+            self._rx_seen_count = self._cmd_rx_count
+            self._rx_seen_t = now_m
+        elif now_m - self._rx_seen_t > cmd_timeout:
+            self._last_skip_reason = 'cmdstale'
+            self._warn_throttled(
+                f'/target_robot/joint_commands 已 {now_m - self._rx_seen_t:.1f}s '
+                '无新消息，暂停下发（请检查 IK 进程）'
+            )
+            return
+
         fb = self.tcp.get_latest_joint_rad()
         if fb is None or len(fb) < N_JOINTS:
             return
         fb = list(fb[:N_JOINTS])
 
         name_to_pos = {str(n): float(p) for n, p in zip(msg.name, msg.position)}
-        # 以真机反馈为底：臂关节始终发绝对值；仅腰/头用 -100。
-        # （若未动轴也发 -100，部分控制器对 movej_canfd 会直接 program_run_failed）
-        joints = list(fb)
-        updated = False
-        hit_left = 0
-        hit_right = 0
-        skipped = 0
-        max_step_abs = 0.0
-        max_err_abs = 0.0
 
-        def apply_arm(urdf_names, limits, start_idx) -> int:
-            nonlocal updated, skipped, max_step_abs, max_err_abs
-            hit = 0
-            for i, (uname, (lo, hi)) in enumerate(zip(urdf_names, limits)):
-                if uname not in name_to_pos:
-                    continue
-                ik_val = clip(name_to_pos[uname], lo, hi)
-                idx = start_idx + i
-                err = ik_val - fb[idx]
-                max_err_abs = max(max_err_abs, abs(err))
-                # 仅极端错误初值(接近 ±π 量级)才丢弃；普通大偏差仍限速追
-                if abs(err) > self.max_joint_jump_rad:
-                    skipped += 1
-                    continue
-                if abs(err) <= self.command_eps_rad:
-                    continue
-                # 始终朝 IK 方向限速步进（反向时也能跟上，不会冻住）
-                step = err * self.follow_ratio
-                step = clip(step, -self.max_joint_step_rad, self.max_joint_step_rad)
-                joints[idx] = fb[idx] + step
-                max_step_abs = max(max_step_abs, abs(step))
-                updated = True
-                hit += 1
-            return hit
+        # IK 目标活动检测：任一受控轴目标变化超阈 → 视为「在跟手」，清 hold 锁。
+        # 没有它，迟滞会把慢速跟随也卡在死区里。
+        ik_move_eps = float(self.get_parameter('ik_move_eps_rad').value)
+        ik_moved = False
+        for n, p in name_to_pos.items():
+            prev = self._last_ik_pos.get(n)
+            if prev is None or abs(p - prev) > ik_move_eps:
+                ik_moved = True
+        self._last_ik_pos = dict(name_to_pos)
 
-        if self.enable_left:
-            hit_left = apply_arm(LEFT_URDF_JOINTS, self.left_limits, IDX_LEFT_START)
-        if self.enable_right:
-            hit_right = apply_arm(RIGHT_URDF_JOINTS, self.right_limits, IDX_RIGHT_START)
+        # 下发计划纯逻辑（StepPlanner 可离线单测），此处只做门禁与副作用
+        plan = self._planner.plan(
+            fb, name_to_pos,
+            step_base=str(self.get_parameter('step_base').value),
+            eps_rad=self.command_eps_rad,
+            jump_rad=self.max_joint_jump_rad,
+            max_step_rad=self.max_joint_step_rad,
+            follow_ratio=self.follow_ratio,
+            hold_enter_rad=float(self.get_parameter('hold_enter_rad').value),
+            hold_rearm_rad=float(self.get_parameter('hold_rearm_rad').value),
+            leash_rad=float(self.get_parameter('tracking_leash_rad').value),
+            ik_moved=ik_moved,
+        )
+        joints = plan.joints
+        skipped = plan.skipped
+        max_step_abs = plan.max_step_abs
+        max_err_abs = plan.max_err_abs
 
         # 腰/头始终保持
         joints[IDX_WAIST] = HOLD
         joints[IDX_HEAD_SHAKE] = HOLD
         joints[IDX_HEAD_NOD] = HOLD
 
-        if not updated or max_step_abs <= self.command_eps_rad:
+        if plan.leash_hold:
+            self._last_skip_reason = 'leash'
+            self._warn_throttled(
+                f'指令与实测偏差超 leash（{self.get_parameter("tracking_leash_rad").value}rad），'
+                '整帧冻结（command 模式护栏，回到 0.8×leash 内自动恢复）'
+            )
+            return
+
+        if not plan.updated or max_step_abs <= self.command_eps_rad:
             if skipped > 0:
                 self._last_skip_reason = 'jump'
                 self._skipped_last = skipped
@@ -618,19 +832,18 @@ class ExtonBridge(Node):
                     )
             else:
                 self._last_skip_reason = 'nodelta'
-                # 按住 Clutch 仍 nodelta 时，打印最大偏差便于定位
+                # 手静保持期（hold 生效）打印保持规模，便于现场判断迟滞是否卡跟随
                 if self.debug_tcp and self._cmd_rx_count % 50 == 0:
-                    names = list(name_to_pos.keys())[:8]
                     self.get_logger().warn(
-                        f'nodelta: max|IK-fb|={max_err_abs:.4f} rad '
-                        f'(需按住Clutch且IK目标变化). names样例={names}'
+                        f'nodelta: max|IK-fb|={max_err_abs:.4f} rad, '
+                        f'held={plan.held}轴, ik_moved={ik_moved}'
                     )
             return
 
         self._last_skip_reason = 'none'
 
         if skipped and self.debug_tcp and self._send_count % 20 == 0:
-            self.get_logger().warn(f'本帧跳过 {skipped} 个偏差过大的关节（保持真机角）')
+            self.get_logger().warn(f'本帧跳过 {skipped} 个偏差过大的关节（保持当前计划/反馈角）')
 
         if self.send_only_on_change and self._last_sent_joint is not None:
             if all(
@@ -646,7 +859,8 @@ class ExtonBridge(Node):
         self._send_count += 1
         if self.debug_tcp and (self._send_count <= 5 or self._send_count % 25 == 0):
             self.get_logger().info(
-                f'匹配左{hit_left}/右{hit_right}轴后入槽（跳过{skipped}） step={max_step_abs:.4f}'
+                f'入槽（跳过{skipped} 保持{plan.held}轴） step={max_step_abs:.4f} '
+                f'base={self.get_parameter("step_base").value}'
             )
 
     def _build_motion_payload(self, joints: List[float]) -> dict:
@@ -709,6 +923,9 @@ class ExtonBridge(Node):
             status = str(m.get('status', ''))
             if status.endswith('failed'):
                 self._fail_count += 1
+                # 指令被拒 → 计划历史作废，下一帧以反馈重估（有限重试）。
+                # 否则 command 模式会认为「已收敛」而不再补发，反馈模式则继续 hunt。
+                self._planner.invalidate()
                 if self._fail_count <= 5 or self._fail_count % 20 == 0:
                     self.get_logger().error(
                         f'控制器拒绝运动 {m.get("command", "?")} {status} '

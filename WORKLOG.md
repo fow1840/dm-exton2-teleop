@@ -286,3 +286,34 @@ average rate: 250.762
 - 未验证：现场 command_rate_hz、ack 语义、单条 movej 过冲量、空闲会话行为、有效指令率实测值、快速运动最大滞后。
 - 下一步：T15（需操作员）与 C2 参数核对并行；T14 在 T12 判别后实施。
 - 现场变更：无（未连现场；本地新增对比文档并入库）。
+
+## 2026-11-06 01:5x | T14/T16/T17 离线实现 + 离线回归框架 | ZCode
+
+- 动作：① `tools/exton_bridge.py` 重构——下发计划抽成纯逻辑类 `StepPlanner`（无 ROS/socket），
+  `_flush_commands` 改门禁+副作用薄壳；实现 T14 迟滞（`hold_enter_rad`/`hold_rearm_rad`/
+  `ik_move_eps_rad`）、T17 `step_base=command` 开环斜坡 + `tracking_leash_rad` 护栏 +
+  拒绝 `invalidate()` 重试、R3 反馈看门狗（`feedback_timeout_s`）、R4 重连清旧快照、
+  R10 指令流活性超时（`command_timeout_s`，rx 计数判据）；语义参数每帧实时读（T11 教训）。
+  ② 新建 `tools/tests/`：`fake_controller.py`（V0.3 协议假控制器，ack=受理/完成两模式、
+  过冲/下垂模型）+ `test_bridge_offline.py`（L1 纯逻辑单测 / L2 闭环仿真 / L3 真 socket）。
+- 证据原文：`Ran 18 tests in 3.338s / OK`（18/18），关键项：
+  - `test_feedback_mode_matches_old_apply_arm`：feedback 模式与旧 apply_arm 逐位一致（回归基线）
+  - `test_a0_old_behaviour_hunts_with_overshoot`：2° 过冲 + 旧行为 → 50 拍 ≥45 发（hunt 复现）
+  - `test_a1_hysteresis_insufficient_for_big_overshoot`：过冲≥enter 时迟滞不足（≥45 发，边界文档化）
+  - `test_a3_command_mode_immune_to_big_overshoot`：command 底 ≤2 发（hunt 免疫）
+  - `test_b_sag_model_feedback_hunts_command_stops`：下垂模型 feedback 底 ≥45 发「追着下垂走」、
+    command 底 ≤2 发（复现 UBT 2026-10-13 实测回归）
+  - `test_c_following_not_blocked_by_hold`：目标连续变化 20/20 发（迟滞不卡跟随）
+  - `test_lockstep_complete_mode_paced_and_rejects_overlap`：执行完才回 + 0.5s 执行 →
+    300ms 超时触发、程序重叠拒绝发生（R2 两语义行为刻画，供 T12 现场对照）
+  - `test_reconnect_drops_stale_snapshot`：重连后旧快照为 None（R4）✅
+  - 过程中修掉两个真缺陷：`invalidate()` 未清 hold 锁（拒绝后重试发不出）；`ik_moved`
+    当帧被 enter 条件重新锁住（慢速跟随会被卡）
+- 结论：T14/T16/T17 的代码与离线回归全部就绪，默认参数=现行为（step_base=feedback、
+  迟滞可用 hold_enter_rad=0.001 退化关闭），上真机只做「备份→推送→参数 A/B→录包对比」，
+  不需要再改代码。**真机一切未验证。**
+- 未验证：真机 hunt 幅度/过冲量（决定迟滞是否足够，T12 判别）；ack 语义；command 模式
+  跟手性收益（T15 基线对比）。
+- 下一步：现场按 T16 部署步骤推 bridge → T14 步骤 1/2 参数 A/B → T15 基线录制 →
+  T17 command 模式 A/B。
+- 现场变更：无（未连现场；本地 tools/exton_bridge.py 已领先远端，**推送前必须按 T16 备份**）。
