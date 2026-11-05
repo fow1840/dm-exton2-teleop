@@ -80,6 +80,11 @@
   规则：真值源先行/权威分级/限位表便宜检查/枚举拟合判可救性/同源重建+双维度回归/
   X_map 帧标定/数据纪律）；TASKS 立 T20。
 
+- `tools/dm-exo/urdf_fk_calib/`（collect_samples.py + compare_fk.py）：T20 真机采数与
+  URDF-vs-TCP 对账工具就绪；离线侦察新发现——协议含 get_tcp_pose/get_config、
+  工具长 0.145m、URDF vs 档案软限位全轴结构性差异（J3 Δ130.5°）、
+  movej 应答=program_run_finish、关节14 堵转史；TASKS T20 重写为明早执行清单。
+
 ## 当前状态与下一步
 
 - 本地 vs 远端：`tools/exton_bridge.py` **领先远端**（远端仍是 fe58738a 版）；

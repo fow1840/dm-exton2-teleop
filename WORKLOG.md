@@ -376,3 +376,35 @@ average rate: 250.762
   固定变换。
 - 下一步：T20 步骤 1（限位三方对比，可与 T06 合并现场执行）。
 - 现场变更：无（纯离线分析）。
+
+## 2026-11-06 03:0x | T20 明早作业包：协议/档案离线侦察 + 采数对账工具 | ZCode
+
+- 动作：① 提取协议 V0.3 PDF 与档案 docx 全文检索；② 解析 URDF 限位并与档案软限位
+  三方对比（报告 /tmp/limit_report.txt 原文已录下条）；③ 写采数器与对账器
+  （tools/dm-exo/urdf_fk_calib/）；④ TASKS T20 重写为明早执行清单。
+- 证据原文：
+  - 协议 PDF（pdftotext）：`get_tcp_pose` 应答 `pose:[x,y,z,qw,qx,qy,qz, …]×2`
+    「left TCP + right TCP」（**qw-first**；「单位：弧度」疑笔误）；`get_config` 应答
+    `upperLimits/lowerLimits`；`get_device_state` 错误码含「0x02010001 第一个电机超软限位」；
+    movej/movej_canfd「-100 表示该关节不移动」；**movej 应答 status=`program_run_finish`**
+    （R2 倾向「执行完才回」）。
+  - 档案 docx：右臂软限位表（2026-07-06）j1 ±179.9 / j2 -148.97~154.70 / j3 -39.53~129.49 /
+    j4 -148.97~154.70 / j5 ±89.95 / j6 ±154.70 / j7 ±154.70；**末端工具长度 0.145 米**；
+    「关节 14（右臂腕部翻滚）反复堵转」故障史；手眼外参占位未标定（与本项目无关）。
+  - URDF 解析：Joint1..7 与 Joint1L..7L **全部 ±170° 一刀切** → 与档案表全轴结构性差异
+    （J3 Δ130.5°、J5 Δ80.0°）；且 bridge 左臂 limits=URDF(±177°)、右臂才用档案表 →
+    左臂可被指令到真机不可达区（候选 bug 来源，待 get_config 实证左臂真机限位）。
+  - URDF 源 CSV：左右臂关节 origin rpy 非简单镜像（Joint1 rpy=(0,0,-3.1416) vs
+    Joint1L=(0,0,0)；Joint2L 多 -π）——UBT 镜像建模隐患形态。
+- 工具：`collect_samples.py`（--probe/--config/--collect，只读不发运动，交互采
+  q17+tcp14 存 jsonl）+ `compare_fk.py`（pinocchio FK vs TCP：位置+姿态双维度、
+  工具 0.145m 两假设、s∈{±1}^7 零偏移枚举可救性判决，UBT 规则 3/4/5 落地）。
+- 自检：两脚本 py_compile OK；qw-first 四元数数学三例自检 OK（恒等/绕z90°/绕x180°）；
+  pinocchio 路径本地无依赖无法测，标注首跑即修。
+- 结论：T20 对账方式从「可能需要物理测量」升级为「协议自带 TCP 位姿直接采数」；
+  明早序列 1h 内可完成采数+判决。T06 的限位问题大半可由 get_config 直接回答。
+- 未验证：get_tcp_pose/get_config 在真机固件上的真实可用性与应答格式（--probe 先验）；
+  TCP 位姿参考系（base? waist?）——若残差整体平移恒定即坐标系问题，再帧标定（UBT 规则 6）；
+  左臂真机软限位。
+- 下一步：明早按 TASKS T20 执行序列跑采数与判决。
+- 现场变更：无（未连现场；新工具在本地，届时 scp 到 tc 主机）。
