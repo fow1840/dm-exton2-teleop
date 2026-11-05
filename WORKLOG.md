@@ -267,3 +267,22 @@ average rate: 250.762
   单条 movej 过冲量、反馈停更是否发生过。
 - 下一步：现场先跑参数核对命令（分析文档第七节末）再动 T14；T12 台架一锤定音 R2。
 - 现场变更：无（未连现场；仅本地新增 docs/exton_bridge_信号流分析.md 并入库）。
+
+## 2026-11-06 01:1x | exton_bridge vs UBT pink_cmd_bridge 对比分析 | ZCode
+
+- 动作：通读 UBT `walker_s2_fk_node/src/walker_s2_pink_cmd_bridge.cpp`（530 行）与
+  `pink_bridge_safety.hpp`（230 行），与本桥逐维度对比，产出
+  docs/exton_bridge_对比UBT与优化路线.md（10 维对比表 + 延迟预算 + R8~R11 新问题 + A/B/C 优化路线）；TASKS 增 T15（跟手性基线测量）、T17（下发语义对齐），T14 补 UBT 冻结保持教训。
+- 证据原文（代码锚点）：
+  - UBT 步进底=指令非反馈：`command_[i] += std::clamp(target_[i]-command_[i], -max_step, max_step)`（safety.hpp:172-174），max_step=0.8rad/s×clamp(dt,≤0.02)（169-170）→ 每拍 ≤0.016rad 匀速斜坡；
+  - UBT 500Hz 流式保活：`publish_rate` 默认 500（cpp:63），Step 拒发时 `HoldCommand(now)` 顶上（cpp:308-314）；
+  - UBT 冻结保持教训（safety.hpp:106-115 注释原文）：「保持命令必须是冻结值，严禁每周期取实时 measured_：若目标=当前实测位，运控零位置误差→零保持力矩→重力下拉→命令追着下垂走→手臂缓慢下垂（2026-10-13 实测回归）」——与本项目 T12 hunt 同构的实测案例；
+  - UBT 偏差锁存：`MaxAbsDifference(command_, measured_) > 0.6 → fault_latched_`（safety.hpp:151-155），离合循环才解除；四路输入超时各 0.2s（135-139）；
+  - EX 桥步进底=反馈：`err = ik_val - fb[idx]; joints[idx] = fb[idx] + step`（exton_bridge.py:581-592）。
+- 结论：
+  1. 架构根差一处：EX=反馈闭环比例纠偏（程序串行），UBT=开环匀速斜坡（500Hz 流式）。EX 的 hunt（R1）、走停步进（R8 新）、无保活（R9 新）、无输入超时（R10 新）、无偏差锁存（R11 新）均由此派生；
+  2. 跟手性影响（推断，待 T15 量化）：有效指令率被 lock-step×movej 程序时长钳制约 1–3Hz、每条之间完全停止、端到端延迟约 250–500ms 量级；UBT 流式低一个量级；
+  3. 优化路线定序：C1 测量基线 → B（T14 迟滞 + 反馈看门狗）→ A（T17 开环斜坡 / T09 canfd 流式 / 保活评估）。
+- 未验证：现场 command_rate_hz、ack 语义、单条 movej 过冲量、空闲会话行为、有效指令率实测值、快速运动最大滞后。
+- 下一步：T15（需操作员）与 C2 参数核对并行；T14 在 T12 判别后实施。
+- 现场变更：无（未连现场；本地新增对比文档并入库）。
