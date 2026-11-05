@@ -1,0 +1,20 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- colcon 构建产物与虚拟环境（现场用硬链接同步，不入库）---
+build/
+install/
+log/
+pink/
+
+# --- 厂商安装包（体积大、不入库，原始 zip 另存）---
+*.zip
+*.apk
+
+# --- 录包与临时产物 ---
+*.npz
+*.db3
+*.mcap
+bags/

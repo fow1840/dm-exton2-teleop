@@ -1,0 +1,128 @@
+<?xml version="1.0"?>
+<!-- 占位符 URDF 文件 - 双臂机器人示例 -->
+<robot name="dual_arm_robot">
+  
+  <!-- Base Link -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.5 0.5 0.1"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <!-- Left Arm -->
+  <link name="left_shoulder">
+    <visual>
+      <geometry>
+        <cylinder length="0.2" radius="0.05"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="left_shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="left_shoulder"/>
+    <origin xyz="0 0.3 0.1" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="1.0"/>
+  </joint>
+
+  <link name="left_upper_arm">
+    <visual>
+      <geometry>
+        <cylinder length="0.3" radius="0.04"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="left_elbow_joint" type="revolute">
+    <parent link="left_shoulder"/>
+    <child link="left_upper_arm"/>
+    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-2.0" upper="2.0" effort="80" velocity="1.0"/>
+  </joint>
+
+  <link name="left_forearm">
+    <visual>
+      <geometry>
+        <cylinder length="0.25" radius="0.03"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="left_wrist_joint" type="revolute">
+    <parent link="left_upper_arm"/>
+    <child link="left_forearm"/>
+    <origin xyz="0 0 0.25" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.5" upper="1.5" effort="50" velocity="1.0"/>
+  </joint>
+
+  <link name="left_end_effector"/>
+
+  <joint name="left_end_joint" type="fixed">
+    <parent link="left_forearm"/>
+    <child link="left_end_effector"/>
+    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Right Arm (Mirror of Left Arm) -->
+  <link name="right_shoulder">
+    <visual>
+      <geometry>
+        <cylinder length="0.2" radius="0.05"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="right_shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="right_shoulder"/>
+    <origin xyz="0 -0.3 0.1" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="100" velocity="1.0"/>
+  </joint>
+
+  <link name="right_upper_arm">
+    <visual>
+      <geometry>
+        <cylinder length="0.3" radius="0.04"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="right_elbow_joint" type="revolute">
+    <parent link="right_shoulder"/>
+    <child link="right_upper_arm"/>
+    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-2.0" upper="2.0" effort="80" velocity="1.0"/>
+  </joint>
+
+  <link name="right_forearm">
+    <visual>
+      <geometry>
+        <cylinder length="0.25" radius="0.03"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="right_wrist_joint" type="revolute">
+    <parent link="right_upper_arm"/>
+    <child link="right_forearm"/>
+    <origin xyz="0 0 0.25" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.5" upper="1.5" effort="50" velocity="1.0"/>
+  </joint>
+
+  <link name="right_end_effector"/>
+
+  <joint name="right_end_joint" type="fixed">
+    <parent link="right_forearm"/>
+    <child link="right_end_effector"/>
+    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+  </joint>
+
+</robot>

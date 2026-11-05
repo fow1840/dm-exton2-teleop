@@ -1,0 +1,40 @@
+# MessageBridge Configuration File
+
+MessageBridge:
+  # Network Configuration
+  network:
+    monitoring_ip: "192.168.61.15"  # 外骨骼实际 IP（须与 Puppetry.yaml 一致）
+    advertise_ip: ""              # Local IP address to advertise (auto-detect if empty). For Docker, use host IP
+    bridge_pub_port: 9900         # Port number for bridge publishing service
+
+  # ROS Topic Name Configuration
+  ros_topics:
+    joints: "/joints"                           # Exoskeleton joint angles topic
+    ee_poses: "/ee_poses"                       # Exoskeleton end-effector poses topic
+    ee_trigger: "/trigger_positions"            # Trigger position data topic. First element: left hand, second: right hand. Range: 0-1
+    joint_state: "/exoskeleton/joint_states"    # Exoskeleton joint states (TF) topic
+    tact_force: "/tact_force"                   # Bilateral tactile force feedback topic. First element: left hand, second: right hand. Range: 0-1
+    cmd_vel: "/custom/cmd_vel"                  # Velocity command topic
+    cmd_vel2: "/custom/cmd_vel2"                # Velocity command topic 2
+    data_record_enable: "/custom/data_record_enable"  # Data recording enable topic
+    custom_a: "/custom/custom_a"               # Custom parameter A topic
+    left_end_increment: "/custom/left_end_increment"   # Left end-effector incremental pose (raw data relative to previous frame)
+    right_end_increment: "/custom/right_end_increment" # Right end-effector incremental pose (raw data relative to previous frame)
+    clutch_left: "/clutch/left"                 # Left arm teleoperation enable signal (Clutch)
+    clutch_right: "/clutch/right"               # Right arm teleoperation enable signal (Clutch)
+    target_robot_left_ee_state: "/target_robot/left_ee/state"    # Target robot left end-effector pose state (subscribed)
+    target_robot_right_ee_state: "/target_robot/right_ee/state"  # Target robot right end-effector pose state (subscribed)
+    target_robot_left_ee_target: "/target_robot/left_ee/target"  # Target robot left end-effector pose target (published)
+    target_robot_right_ee_target: "/target_robot/right_ee/target" # Target robot right end-effector pose target (published)
+
+  # Frame ID Configuration
+  frame_ids:
+    # Base frame: Used for header.frame_id in incremental control pose messages
+    # Affected topics: left_end_increment, right_end_increment, target_robot_left/right_ee_target
+    # Must match the base frame name of the target robot
+    base_frame: "base_link"
+    
+    # End-effector frames: Only used for TF broadcasting visualization, does not affect incremental control flow
+    # TF tree structure: base_frame -> left_ee_frame / right_ee_frame
+    left_ee_frame: "exo_left_ee_frame"    # Left end-effector frame name (for TF visualization)
+    right_ee_frame: "exo_right_ee_frame"  # Right end-effector frame name (for TF visualization)

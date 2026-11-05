@@ -1,0 +1,158 @@
+# Robot FK Adapter (机器人运动学正解适配器)
+
+**版本**: 0.0.1
+
+**适用系统**: ROS 2 (Humble/Iron/Rolling)
+
+**依赖**: `robot_state_publisher`, `tf2_ros`, `geometry_msgs`, `sensor_msgs`
+
+## 1. 项目简介
+
+**Robot FK Adapter** 是专为遥操作外骨骼系统设计的通用接口适配节点。
+
+由于部分目标机器人仅提供关节角度数据（Joint States），而遥操作算法依赖于末端执行器的笛卡尔位姿（Cartesian Pose）。本功能包通过加载机器人的标准 URDF 模型，实时接收关节数据并进行运动学正解（Forward Kinematics），将结果转换为标准的 `PoseStamped` 消息发送给外骨骼控制器。
+
+### 核心特性
+
+* **通用性**：支持任意构型的串联机器人（只需提供 URDF）。
+* **动态配置**：通过 Launch 参数定义基坐标系、末端 Link 和 URDF 路径。
+* **解耦设计**：利用 ROS 2 标准 TF 树进行计算，稳定且高效。
+
+---
+
+## 2. 系统架构
+
+数据流向如下所示：
+
+```mermaid
+graph LR
+    A[客户端机器人] -- /client_robot/joint_states --> B(Robot State Publisher)
+    B -- TF / Static TF --> C[TF Tree]
+    D[URDF File] -.-> B
+    C -- Lookup Transform --> E(FK Adapter Node)
+    E -- /target_robot/left_ee/state --> F[外骨骼控制器]
+    E -- /target_robot/right_ee/state --> F
+
+```
+
+---
+
+## 3. 接口协议 (严格)
+
+为了确保运动学解算正确，客户端必须严格遵守以下通信协议。
+
+### 3.1 输入接口 (订阅)
+
+* **默认话题**: `/client_robot/joint_states` (可通过参数修改)
+* **消息类型**: `sensor_msgs/msg/JointState`
+
+**数据规范要求：**
+
+1. **`header.stamp`**: **必须**填充当前的 ROS 系统时间。若时间戳为 0 或严重滞后，会导致 TF 变换超时。
+2. **`name`**: 必须包含 URDF 中定义的所有非固定关节（Revolute/Prismatic）名称，**大小写敏感**。
+3. **`position`**: 对应的关节角度（弧度制），长度必须与 `name` 一致。
+
+### 3.2 输出接口 (发布)
+
+适配器将计算结果发布到以下话题供外骨骼订阅：
+
+| 话题名称 | 消息类型 | 说明 |
+| --- | --- | --- |
+| `/target_robot/left_ee/state` | `geometry_msgs/msg/PoseStamped` | 左臂末端相对于基座的位姿 |
+| `/target_robot/right_ee/state` | `geometry_msgs/msg/PoseStamped` | 右臂末端相对于基座的位姿 |
+
+---
+
+## 4. 编译与安装
+
+确保已安装 ROS 2 基础环境。
+
+```bash
+# 1. 进入工作空间
+cd ~/your_colcon_ws
+
+# 2. 安装依赖 (确保 robot_state_publisher 等已安装)
+rosdep install --from-paths src --ignore-src -r -y
+
+# 3. 编译
+colcon build --packages-select robot_fk_adapter
+
+# 4. 配置环境变量
+source install/setup.bash
+
+```
+
+---
+
+## 5. 使用说明
+
+本功能包完全通过 `launch` 文件启动，支持命令行参数配置。
+
+### 5.1 启动命令示例
+
+```bash
+ros2 launch robot_fk_adapter robot_fk_adapter.launch.py \
+    urdf_path:="/home/user/models/my_robot.urdf" \
+    base_link:="base_footprint" \
+    left_ee_link:="left_tool0" \
+    right_ee_link:="right_tool0" \
+    joint_states_topic:="/robot/joint_states"
+
+```
+
+### 5.2 启动参数详解
+
+| 参数名 | 默认值 | 必填 | 描述 |
+| --- | --- | --- | --- |
+| **`urdf_path`** | 无 | **是** | 机器人 URDF 文件的**绝对路径**。 |
+| `base_link` | `base_link` | 否 | 计算位姿的参考基准坐标系名称。 |
+| `left_ee_link` | `left_hand_tcp` | 否 | 左臂末端执行器的 Link 名称（需在 URDF 中存在）。 |
+| `right_ee_link` | `right_hand_tcp` | 否 | 右臂末端执行器的 Link 名称。 |
+| `joint_states_topic` | `/client_robot/joint_states` | 否 | 客户端实际发送关节数据的话题名称。 |
+
+---
+
+## 6. URDF 文件准备指南
+
+为了保证适配器顺利运行，请对客户提供的 URDF 进行以下检查：
+
+1. **文件格式**：必须是标准 XML 格式的 `.urdf` 文件（若是 `.xacro` 请先转换为 `.urdf`）。
+2. **网格文件**：
+* 本节点**不需要**加载可视化的 `.stl` 或 `.dae` 网格文件。
+* 如果 URDF 中包含 `<mesh filename="package://...">`，请确保运行环境安装了对应的包，或者将网格路径修改为绝对路径。
+* **推荐做法**：制作一个仅包含运动学信息（Kinematics Only）的精简版 URDF，移除 `<visual>` 和 `<collision>` 标签，以避免路径报错。
+
+
+3. **Link 名称确认**：使用文本编辑器打开 URDF，确认用于正解的 `base_link` 和 `end_effector_link` 名称拼写正确。
+
+---
+
+## 7. 常见问题排查 (Troubleshooting)
+
+### Q1: 启动报错 `[robot_state_publisher]: Model parsing error: xml parsing error`
+
+* **原因**: URDF 文件路径错误或文件内容格式损坏。
+* **解决**: 检查 `urdf_path` 是否为绝对路径，确认文件是否存在。
+
+### Q2: 控制台频繁警告 `LookupTransform Error` 或 `ExtrapolationException`
+
+* **原因**: 传入的 JointState 时间戳与本地时间不同步。
+* **解决**:
+* 如果是真实机器人，请确保两台电脑通过 `chrony` 或 `ntp` 进行了时间同步。
+* 如果是仿真/回放数据，请在启动时增加 `use_sim_time:=True`。
+* 检查客户端代码，确保 `header.stamp` 赋值为发送时刻的时间。
+
+
+
+### Q3: 话题有数据，但位姿数值一直不变
+
+* **原因**: URDF 中对应的关节类型被设为 `fixed`。
+* **解决**: 检查 URDF 中的 `<joint>` 标签，确保类型为 `revolute` 或 `continuous`。
+
+---
+
+## 8. 维护与联系
+
+* **维护者**: [您的名字/团队]
+* **联系邮箱**: [您的邮箱]
+* **最后更新**: 202X-XX-XX

@@ -1,0 +1,13 @@
+# 核心算法库（这些在ROS源里可能版本不对，必须用pip安装）
+pin-pink==3.5.0
+pin==2.7.0
+loop-rate-limiters==1.2.0
+qpsolvers==4.8.2
+proxsuite==0.7.2
+osqp==1.0.5
+
+numpy>=1.26.4
+scipy>=1.15.3
+
+# 其他纯Python工具
+eigenpy==3.5.1

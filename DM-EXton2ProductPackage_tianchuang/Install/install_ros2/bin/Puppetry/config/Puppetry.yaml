@@ -1,0 +1,27 @@
+Puppetry:
+  communication:
+    puppeteer_monitoring_ip: "192.168.61.15"  # 须与 MessageBridge.yaml 的 monitoring_ip 一致
+    puppeteer_port: 9899
+    use_ipc: true 
+    messagebridge_ipc_path: "ipc:///tmp/messagebridge_pub.ipc"
+    puppetry_ipc_path: "ipc:///tmp/puppetry_pub.ipc"
+    messagebridge_tcp_ip: "127.0.0.1" 
+    messagebridge_port: 9900
+  urdf:
+    directory: "./urdf_models"
+    default_file: "robot.urdf"
+  kinematics:
+    enable_ik_solver: true
+    solver_type: "pinocchio"
+    max_iterations: 1000
+    tolerance: 1.0e-6
+    use_joint_limits: true
+    collision_check: false
+  logging:
+    level: "info"  # trace, debug, info, warn, error, critical
+  mirroring:
+    enable_mirroring: false   # Mirroring disabled by default    
+  run:
+    # run interval (ms). Original exoskeleton feedback is about 1000Hz (1ms)
+    # Users can configure within the range of 1~1000ms (1kHz ~ 1Hz)
+    interval_ms: 10
