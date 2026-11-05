@@ -193,4 +193,54 @@ average rate: 250.762
 - 下一步：操作员按住左离合手静约 8s 两次 → 拉新包，用同一判据对比目标滑移与 IK J1 净变化。
 - 现场变更：远端 ik_node.py 已替换（备份 bak_1105_2316），IK 进程重启（78569→79431），运行参数 `publish_commanded_ee_state` 已置 False；clutch_probe 重启（78802→79635）。bridge / MessageBridge / Puppetry / FK 未动。
 
+## 2026-11-05 23:30 | T11 复测观察（仅口述，无录包） | 操作员 + Codex
 
+- 动作：操作员在 T11 条件（`publish_commanded_ee_state=False`、手静冻结生效）下按住离合实测；随后离开机器人现场，**未能拉取新录包**。
+- 证据（操作员口述，非录包/日志原文，按规矩标注）：
+  - 「按住离合的也会移动，但是确实是移动的幅度小了些。」
+- 结论：
+  - 手静冻结 + 关闭指令 state 的组合**没有完全消除**松下手臂移动，但主观幅度下降。**方向与预期一致，幅度无法量化**。
+  - 因缺新包，无法判断下降来自 T11（state 双发布回路被切断）还是仅来自手静冻结的固有收益，**归因未验证**。
+  - 仍存在残余移动，说明至少还有一条未消除的驱动路径；排除项只能到「不是纯 IK 静默追赶」这一步（该机制已由 23:08 包证伪为已消除）。
+- 未验证：残余移动幅度、周期、来源（Puppetry 目标自漂 / 真机 J1 自振 / 控制器队列）；右臂完全未测。
+- 下一步（明天，需现场）：
+  1. 先确认现场 IK 进程仍是 79431 且 `publish_commanded_ee_state` 仍为 False（进程若被重启会回到 True）。
+  2. 拉取 `~/桌面/dm-exo/bags/` 里 23:17 之后的新包，用同一判据（手静窗目标滑移、IK J1 净变化、IK 冻结窗内真机 J1L 振幅）对比 `press01_left_230820.npz`。
+  3. 若目标滑移未降 → 漂移来自 Puppetry 自身；若已降但手臂仍动 → 转 T12 排查下游控制器/bridge。
+  4. 补测右臂。
+- 现场变更：无（本轮未改代码、未重启进程、未下发运动）。clutch_probe（pid 79635，1800s）可能已自然到期；IK 与其余组件保持 23:17 状态。
+
+
+
+## 2026-11-06 00:1x | 信号链路全面分析 + 本地 git 建立 | ZCode
+
+- 动作：① `git init` 建本地仓库（.gitignore 排除 pink venv / build / install / zip / apk / 录包），
+  首个提交 = 2026-11-05 21:42 快照 + T10/T11/T12 修复版代码；② 通读 ik_node.py（582 行工作副本）、
+  exton_bridge.py、joint_to_pose_adapter.py、Puppetry.yaml、ik_retargeting.launch.py，
+  结合 UBT-walker-s2 台账（P-007 / P-012 / P-016 / C-002 / P-014）做链路与根因分析，
+  产出 `docs/信号链路与离合自运动分析.md`；③ TASKS.md 增 T13（Puppetry state 依赖离线注入）、
+  T14（bridge hold+迟滞），T12 条目补机制分析。
+- 证据（代码行锚点，均已在本仓库快照核对）：
+  - `joint_to_pose_adapter.py:47-48` `if self.yield_when_clutch and any(self.clutch.values()): return`
+    → 按住离合期间 FK adapter 停发 state，由 ik_node 接管；
+  - `ik_node.py:540-541` `if bool(self.get_parameter('publish_commanded_ee_state').value) and clutch_any: self._publish_ee_states(self.q_commanded)`
+    → 接管后发的是**指令 FK**（q_commanded），非真机实测；
+  - `exton_bridge.py:581-593` `err = ik_val - fb[idx]; ... joints[idx] = fb[idx] + step`
+    → bridge 以**真机反馈**为底闭环纠偏，`command_eps_rad=0.001rad`（第 409 行），
+    IK 冻结 ≠ bridge 停发；
+  - `ik_node.py:501-507` solve_ik 未传 limits= → 核对 UBT P-016 澄清记录 + 本仓
+    requirements.txt `pin-pink==3.5.0`：pink≥3.0 默认即应用 Configuration/VelocityLimit，
+    **no-op，不立任务**（防误判）。
+- 结论：
+  1. 链路里叠加三个串联闭环：IK 内环(250Hz) / bridge 反馈纠偏外环 / Puppetry state 锚定环；
+  2. 机制②（T11 目标自漂移）回路结构具体化：按住期间 state=指令FK，若 Puppetry 连续参考
+     则 target=state+C 永追不上，漂移速率=IK 闭环收敛速率，与实测 ~20mm/s 量级吻合（推断，待 T13/T11 量化）；
+  3. 机制③（T12 自振）新提出：bridge 第二闭环在 IK 冻结后仍以 0.057° 判据持续发纠偏 movej
+     （23:08 测试拒绝 19→59 为冻结窗内仍发的直接证据），每条 movej 为 ~1s P2P 程序，
+     节拍与 ~1s 振荡周期吻合，疑 hunt 极限环（推断）；
+  4. 23:30 口述复测（state 双发布已关仍动、幅度变小）与上述「②有贡献 + ③独立存在」一致。
+- 未验证：Puppetry 对 state 的连续依赖（T13）；ack=受理还是完成、movej 到位过冲量（T12 台架）；
+  现场 bridge `command_rate_hz` 实际值（5 或 50，需 `ros2 param get` 现场确认）。
+- 下一步：按分析文档第四节顺序——T11 补录包复测 与 T12 日志对齐并重；T13 可并行。
+- 现场变更：无（纯离线分析 + 本地 git；未连真机、未改远端文件）。git 提交两笔：
+  快照基线 + 本次台账/分析（含 23:30 现场 Codex 条目一并入库）。

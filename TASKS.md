@@ -147,12 +147,17 @@
 ### T11 手静但 Puppetry 目标自身滑移（上游目标漂移）
 
 - 优先级：P0
-- 状态：`DOING`（Codex，2026-11-05 23:17 实验条件就绪，等待真机复测）
-- 依赖：需操作员配合复测
+- 状态：`BLOCKED`（Codex，2026-11-05 23:30；缺现场与录包，明天继续）
+- 依赖：需操作员在场复测 + 拉取新录包
 - 证据：`press01_left_230820.npz` 手静窗（手 p2p≤0.65°）内目标滑移最高 10.2mm/0.5s≈20mm/s（w=327.992），高于冻结阈值 → IK 合法跟随 → 手臂移动；全按住段 IK J1 净变化 -11.09°。
 - 已做：`publish_commanded_ee_state` 改为运行时读参（默认仍 True），现场已 `ros2 param set ... false` 并确认 `Boolean value is: False`；IK 重启 pid 79431（备份 `ik_node.py.bak_1105_2316`，md5 `2af30692…`）；离线回归 OVERALL PASS。详见 WORKLOG 23:16 条目。
-- 动作：操作员按住左离合手静约 8s 两次 → 对比同一判据下目标滑移与 IK J1 净变化。
-- 验收：关闭前后同判据目标滑移对比写 WORKLOG。若显著下降 → state 双发布回路实锤；若不变 → 漂移另有上游来源（Puppetry 自身）。
+- 复测观察（操作员口述，无录包）：「按住离合的也会移动，但是确实是移动的幅度小了些。」→ 未完全消除，幅度下降但**归因未验证**。
+- 下一步（需现场）：
+  1. 确认 IK 仍为 pid 79431 且参数仍 False（重启会回 True）；
+  2. 拉 23:17 之后的新包，用同一判据对比 `press01_left_230820.npz`；
+  3. 目标滑移未降 → Puppetry 自身漂移；已降但仍动 → 转 T12 查下游；
+  4. 补测右臂。
+- 验收：关闭前后同判据目标滑移对比写 WORKLOG。
 
 ### T12 IK 指令冻结时真机 J1L 自振（下游）
 
@@ -160,8 +165,35 @@
 - 状态：`TODO`
 - 依赖：需操作员配合复测
 - 证据：同一包内 IK 全零冻结窗，真机 J1L 以 ~1s 周期 ±2.2~2.9° 交替振荡（w=331.99~336.99）；全程 J1 实测净 -4.19° vs 指令 -11.09°；测试期间 bridge `program_run_failed` 19→59。
-- 动作：先对齐 T3 日志拒绝时间戳与振荡窗口；再排查控制器侧（队列/使能状态）；必要时 joint_probe 直连（先停 bridge）。
+- 机制分析（2026-11-06，详证见 docs/信号链路与离合自运动分析.md 机制③）：bridge `_flush_commands` 是以真机反馈为底的第二闭环（err=IK−fb，`exton_bridge.py:581-593`），|err|>0.001rad(0.057°) 就发 movej——**IK 冻结≠bridge 停发**，拒绝数 19→59 是冻结窗内仍在发的直接证据；每条 movej 为完整 P2P 程序（v=15，小行程 ~1s 节拍，与振荡周期吻合），疑为纠偏 hunt 极限环。ack 通常 <300ms 返回（timeout 仅 25/2092），疑为「受理」而非「完成」应答（未验证）。23:30 复测（state 双发布已关）仍有残余移动 → 机制③嫌疑权重上升。
+- 动作：① 对齐 T3 日志 movej 发送/拒绝时间戳与振荡窗口；② 有条件做单步 movej 台架（停 bridge，joint_probe 发一条 3° 外固定位姿 movej，看 status 时刻 vs 反馈稳定时刻 vs 是否过冲）——单步干净则 hunt 为 bridge 连发驱动，单步过冲则控制器侧问题；③ 若确认 bridge 驱动 → T14（hold+迟滞）。
 - 验收：给出振荡与拒绝的因果方向或排除证据。
+
+### T13 Puppetry 对 {side}_ee/state 的依赖刻画（离线注入，不动机器人）
+
+- 优先级：P1
+- 状态：`TODO`
+- 依赖：无（需停 bridge 释放 TCP/避免干扰；不按踏板、不下发真机命令）
+- 说明：Puppetry 是 vendor 二进制，其对 `/target_robot/{side}_ee/state` 的消费方式
+  （按下瞬间采样锚定 or 按住期间连续参考）决定 T11 实锤后的永久修复选型
+  （分析文档第四节方案 a/b/c）。
+- 动作：停 bridge；`ros2 topic pub /clutch/left std_msgs/Bool true`；回放录包外骨骼流
+  （或保持外骨骼静止）；人工给 `/target_robot/left_ee/state` 发已知轨迹（如 10mm 正弦）；
+  观察 `/target_robot/left_ee/target` 是否跟随 state 移动、相位/增益如何。
+- 验收：WORKLOG 给出「target 是否随 state 动 + 量级」的原文记录；据此在分析文档
+  第四节三方案中选定一方案。
+- 风险：注入 state 会同时被 MessageBridge 转发，确认 bridge 已停、真机侧无命令下发。
+
+### T14 bridge hold+迟滞（防纠偏 hunt，机制③修法，条件触发）
+
+- 优先级：P1（T12 确认 bridge 驱动后升 P0）
+- 状态：`TODO`（先等 T11 复测 / T12 判别，避免多变量同时动）
+- 位置：`tools/exton_bridge.py` `_flush_commands`（eps 判定处，第 587 行附近）
+- 说明：当前 `command_eps_rad=0.001rad(0.057°)` 远小于 movej 到位能力，导致持续纠偏。
+  加迟滞：|err|<0.01rad 认为到位停发；|err|>0.03~0.05rad 或 IK 指令变化才恢复发。
+  同思路出处：UBT P-007 用死区打破「限速器自激极限环」。
+- 验收：手静冻结窗内 `movej_tx` 停止增长；J1 振荡消失；跟手段延迟无可感知劣化。
+- 风险：改实时发送路径，改前备份远端原文件；先离线模拟 fb 动力学回归。
 
 ## 三、别接的活（明确出界）
 

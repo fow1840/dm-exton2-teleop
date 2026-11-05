@@ -100,6 +100,7 @@ Puppetry 以它为参考 → 目标坐标系漂移。已清除，并在 `stop_te
 - 下一步验证静止保持及近奇异稳定策略，并单独关闭指令 state 发布做对照。双发布对 Puppetry 漂移的具体因果贡献、松开后真机继续运动的原因及修复有效性仍未验证。
 - **2026-11-05 23:01 手静冻结已部署并实测**：IK 指令层手静自运动消除（冻结窗 `ik_net` 全零，探针峰值 16.3mrad vs 修复前 5935mrad，包 `press01_left_230820.npz`）。残余"手静臂动"拆成两个新问题：① 手静但 Puppetry 目标自身滑移最高 ~20mm/s 驱动 IK 合法跟随（疑 `/target_robot/left_ee/state` 双发布回路，未验证，见 T11）；② IK 指令完全冻结时真机 J1L 仍 ~1s 周期 ±2.5° 自振，同期 bridge 拒绝 19→59（见 T12）。远端源文件备份 `ik_node.py.bak_1105_2301`，新参数 `still_lin_speed_mps=0.005` / `still_ang_speed_rps=0.05`。
 - **2026-11-05 23:17 T11 实验条件就绪**：`publish_commanded_ee_state` 改为运行时读参（默认仍 True），现场已置 False 并确认生效（IK pid 79431，备份 `ik_node.py.bak_1105_2316`，md5 `2af30692…`，离线回归 OVERALL PASS）。此改动是 T11 单变量对照的必要前提：原代码启动即缓存参数，`ros2 param set` 不生效。效果待新录包验证。
+- **2026-11-05 23:30 复测观察（口述，无录包）**：T11 条件下按住离合仍会动，但操作员主观判断「幅度小了些」。**幅度未量化、归因未验证**——无法区分是关闭指令 state 的收益还是手静冻结的固有收益。可确认的是：残余移动仍有至少一条未消除的驱动路径。明天需先确认 IK 仍为 pid 79431 且 `publish_commanded_ee_state=False`（进程重启会回 True），再拉 23:17 之后的新包对比。
 - 本轮已按上条部署 ik_node.py（含备份与重启记录，详见 WORKLOG 23:01 与 23:16 条目）；bridge / MessageBridge / Puppetry / FK 未动，未手动下发运动指令。
 
 ### 历史阻塞：机器人不跟手（program_run_failed，21:42 快照）
