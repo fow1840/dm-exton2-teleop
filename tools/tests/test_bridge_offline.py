@@ -371,6 +371,51 @@ class TestAsyncTcpClient(unittest.TestCase):
         self.assertLessEqual(srv.movej_accepted, 5)
         self.assertGreaterEqual(ack, 1)
 
+    def test_live_limits_fetched_and_parsed(self):
+        """T23：get_config 经 rx 解析缓存，parse_live_limits 收缩安全带。"""
+        srv = self._start()
+        c = eb.AsyncTcpClient('127.0.0.1', srv.port, query_hz=50)
+        self.clients.append(c)
+        c.connect()
+        c.send_control({'command': 'get_config'})   # 真机上由看门狗周期发
+        t0 = time.monotonic()
+        while c.get_live_limits() is None and time.monotonic() - t0 < 2:
+            time.sleep(0.01)
+        live = c.get_live_limits()
+        self.assertIsNotNone(live)
+        ((l_lo, l_hi), (r_lo, r_hi)) = live
+        self.assertEqual(len(l_lo), 7)
+        self.assertEqual(len(r_lo), 7)
+        # 真机实测：J2 上限 0.26、J5 上限 2.79（档案 j5=±1.57 已证过时）
+        self.assertAlmostEqual(l_hi[1], 0.26 - 0.0349, places=6)
+        self.assertAlmostEqual(l_hi[4], 2.79 - 0.0349, places=6)
+        # 2° 安全带：下限上收、上限下收
+        self.assertAlmostEqual(l_lo[3], -0.69 + 0.0349, places=6)
+
+    def test_live_limits_replace_archive_no_clip_fight(self):
+        """T23 验收核心：J5R=-1.949（超档案 ±1.57、真机限内）在动态限位下不裁不追。"""
+        srv = self._start()
+        c = eb.AsyncTcpClient('127.0.0.1', srv.port, query_hz=50)
+        self.clients.append(c)
+        c.connect()
+        c.send_control({'command': 'get_config'})   # 真机上由看门狗周期发
+        t0 = time.monotonic()
+        while c.get_live_limits() is None and time.monotonic() - t0 < 2:
+            time.sleep(0.01)
+        ((l_lo, l_hi), (r_lo, r_hi)) = c.get_live_limits()
+        p = eb.StepPlanner([
+            (eb.LEFT_URDF_JOINTS, list(zip(l_lo, l_hi)), eb.IDX_LEFT_START, True),
+            (eb.RIGHT_URDF_JOINTS, list(zip(r_lo, r_hi)), eb.IDX_RIGHT_START, True),
+        ])
+        fb = [0.0] * eb.N_JOINTS
+        fb[eb.IDX_RIGHT_START + 4] = -1.949   # J5R 合法位姿（档案表会裁到 -1.57）
+        ik = {n: fb[eb.IDX_RIGHT_START + i] for i, n in enumerate(eb.RIGHT_URDF_JOINTS)}
+        plan = p.plan(fb, ik, step_base='feedback', eps_rad=0.001, jump_rad=3.0,
+                      max_step_rad=0.20, follow_ratio=1.0, hold_enter_rad=0.01,
+                      hold_rearm_rad=0.05, leash_rad=0.6, ik_moved=False)
+        self.assertFalse(plan.updated)        # 无裁剪 → 无纠偏 → 静默
+        self.assertAlmostEqual(plan.max_err_abs, 0.0, places=9)
+
     def test_reconnect_drops_stale_snapshot(self):
         """R4 回归：重连后旧快照必须清空，同步等新应答。"""
         srv1 = self._start()

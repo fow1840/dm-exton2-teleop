@@ -121,6 +121,38 @@ def extract_joint_rad(msg: dict) -> Optional[List[float]]:
     return None
 
 
+def parse_live_limits(msg: dict, margin_rad: float = 0.0349):
+    """解析 get_config 应答 → ((左7下限, 左7上限), (右7下限, 右7上限))，弧度。
+
+    get_config 回 14 维：约定与 get_tcp_pose 同序（先左后右）。2026-11-06 真机实测
+    左右完全相同（UBT「执行器双臂统一」），故即使固件序相反今日也无差异；
+    若未来两臂限位分化，需用 t09 台架先验证字段序。
+    margin_rad：向区间内部收缩的安全带（默认 2°，与档案采集程序同款习惯）。
+    解析失败/字段缺失/长度不足 → 返回 None（调用方回退旧限位）。
+    """
+    try:
+        lower = [float(x) for x in (msg.get('lowerLimits') or [])]
+        upper = [float(x) for x in (msg.get('upperLimits') or [])]
+    except (TypeError, ValueError):
+        return None
+    if len(lower) < N_JOINTS - 3 or len(upper) < N_JOINTS - 3:
+        return None
+    lower = lower[:2 * ARM_DOF]
+    upper = upper[:2 * ARM_DOF]
+    out = []
+    for arm in (0, 1):
+        lo = []
+        hi = []
+        for i in range(ARM_DOF):
+            a, b = lower[arm * ARM_DOF + i], upper[arm * ARM_DOF + i]
+            if not (math.isfinite(a) and math.isfinite(b)) or not b > a:
+                return None
+            lo.append(a + margin_rad)
+            hi.append(b - margin_rad)
+        out.append((lo, hi))
+    return tuple(out)
+
+
 class FramePlan:
     """一帧下发计划的结果（纯数据，便于离线断言）。"""
 
@@ -289,6 +321,8 @@ class AsyncTcpClient:
         self._state_lock = threading.Lock()
         self._latest_joint_rad: Optional[List[float]] = None
         self._latest_joint_ts: Optional[float] = None  # 单调钟，反馈新鲜度看门狗用
+        # T23：get_config 实时软限位缓存（parse_live_limits 产物），rx 线程写入
+        self._live_limits: Optional[tuple] = None
         self._responses: collections.deque = collections.deque(maxlen=64)
         self._rx_buffer = ''
         self._rx_thread: Optional[threading.Thread] = None
@@ -400,6 +434,11 @@ class AsyncTcpClient:
             if self._latest_joint_ts is None:
                 return None
             return time.monotonic() - self._latest_joint_ts
+
+    def get_live_limits(self) -> Optional[tuple]:
+        """get_config 实时软限位（T23）；尚未取得时返回 None。"""
+        with self._state_lock:
+            return self._live_limits
 
     def get_movej_lock_stats(self) -> tuple:
         """返回 movej 实际发送/应答/超时计数，用于现场验证 lock-step。"""
@@ -532,6 +571,11 @@ class AsyncTcpClient:
                     # 立即唤醒 tx，不必等待空闲轮询周期。
                     with self._motion_cv:
                         self._motion_cv.notify_all()
+                if 'lowerLimits' in msg and 'upperLimits' in msg:
+                    live = parse_live_limits(msg)
+                    if live is not None:
+                        with self._state_lock:
+                            self._live_limits = live
                 joints = extract_joint_rad(msg)
                 if joints is not None and len(joints) >= N_JOINTS:
                     self._latest_joint_rad = joints[:N_JOINTS]
@@ -567,6 +611,9 @@ class ExtonBridge(Node):
         self.declare_parameter('enable_right', True)
         self.declare_parameter('enable_left', True)
         self.declare_parameter('use_archive_right_limits', True)
+        # T23：取得 get_config 实时限位后替换静态限位（两臂都换）。静态表只作
+        # 未取得前的兜底——2026-11-06 实测档案表 j5 与真机差 1.22rad，会裁合法位姿。
+        self.declare_parameter('use_live_limits', True)
         self.declare_parameter('send_only_on_change', False)  # 遥操建议 false，否则易只下发一帧
         self.declare_parameter('command_eps_rad', 0.001)
         # 仅丢弃接近整圈/错误初值的轴；普通大偏差改为限速追（见 apply_arm）
@@ -651,6 +698,8 @@ class ExtonBridge(Node):
         self._rx_seen_t = time.monotonic()
         # IK 目标活动检测：与上一帧 IK 值逐轴比较
         self._last_ik_pos: dict = {}
+        # T23：动态限位应用状态
+        self._live_limits_applied = False
         # 观测性：看门狗窗口化增量基线 + 最后一拍计划上下文（B 项状态行增强）
         self._wd_prev: dict = {}
         self._last_plan_info = (0, 0, 0.0, False)  # held, skipped, max_err_abs, ik_moved
@@ -933,6 +982,26 @@ class ExtonBridge(Node):
     # 看门狗：状态汇报 + 异步应答消费（失败计数/enable 失败检测）
     # ------------------------------------------------------------------
     def _status_watchdog(self) -> None:
+        # T23：取得 get_config 实时限位后替换静态限位。get_config 走控制队列发送，
+        # rx 线程解析缓存；未应用前每 2s 重发一次（自愈，丢帧不致死）。
+        if not self._live_limits_applied and bool(
+                self.get_parameter('use_live_limits').value):
+            self.tcp.send_control({'command': 'get_config'})
+            live = self.tcp.get_live_limits()
+            if live is not None:
+                (l_lo, l_hi), (r_lo, r_hi) = live
+                self.left_limits = list(zip(l_lo, l_hi))
+                self.right_limits = list(zip(r_lo, r_hi))
+                self._planner.arms[0] = (LEFT_URDF_JOINTS, self.left_limits,
+                                         IDX_LEFT_START, self.enable_left)
+                self._planner.arms[1] = (RIGHT_URDF_JOINTS, self.right_limits,
+                                         IDX_RIGHT_START, self.enable_right)
+                self._live_limits_applied = True
+                self.get_logger().info(
+                    'get_config 动态限位已生效（内缩2°）：'
+                    f'L2=[{l_lo[1]:.3f},{l_hi[1]:.3f}] L4=[{l_lo[3]:.3f},{l_hi[3]:.3f}] '
+                    f'L5=[{l_lo[4]:.3f},{l_hi[4]:.3f}] R5=[{r_lo[4]:.3f},{r_hi[4]:.3f}] …')
+
         # 消费 TCP 应答：统计运动被拒 / enable 失败
         responses = self.tcp.poll_responses()
         for m in responses:

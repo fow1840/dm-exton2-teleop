@@ -74,6 +74,11 @@ class FakeController(socketserver.ThreadingTCPServer):
         self.movej_rejected = 0
         self.query_count = 0
         self.movej_targets = []  # 收到的 17 维目标序列（事后断言用）
+        # T23：get_config 软限位（默认=2026-11-06 真机实测值）
+        self.config_lower = [-2.79, -2.3562, -2.79, -0.69, -2.79, -1.57, -2.79,
+                             -2.79, -2.3562, -2.79, -0.69, -2.79, -1.57, -2.79]
+        self.config_upper = [2.79, 0.26, 2.79, 2.26, 2.79, 1.57, 2.79,
+                             2.79, 0.26, 2.79, 2.26, 2.79, 1.57, 2.79]
 
     # ---- 连接与发送 ----
     def _set_sock(self, sock):
@@ -117,6 +122,11 @@ class FakeController(socketserver.ThreadingTCPServer):
             with self._lock:
                 self.query_count += 1
             out.append({'command': 'get_joint_position', 'joint': list(self._joints)})
+        elif cmd == 'get_config':
+            out.append({'command': 'get_config',
+                        'lowerLimits': list(self.config_lower),
+                        'upperLimits': list(self.config_upper),
+                        'status': 'program_run_finish'})
         elif cmd == 'movej':
             out.extend(self._handle_movej(msg))
         return out
