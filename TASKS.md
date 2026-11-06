@@ -4,13 +4,13 @@
 > 状态取值：`TODO` / `DOING` / `BLOCKED`（缺人工或硬件）/ `DONE`（附证据）/ `DEAD`（结论推翻，保留不删）
 > 更新规则见 [AGENTS.md](./AGENTS.md) §0。
 
-## 一、接手前必读的现状（2026-11-05 22:17–22:24 只读核对）
+## 一、接手前必读的现状（2026-11-06 15:47 现场再核对）
 
-- 当前进程：MessageBridge 75283 / robot_state_publisher 75358 / bridge 75430 / Puppetry 75465 / IK 75524。
-- bridge 已含 lock-step，现场日志：`sent=787 movej_tx=520 ack=520 timeout=9`，本日志拒绝累计 `19`；下表为历史快照，不代表当前现场。
-- 最新四包含离合通道。`press04_left_221400.npz`：按住 5.320s，左 IK J7 范围 15.9863°，真机左臂最大关节范围 2.0435°。
-- 已确认 `/target_robot/left_ee/state` 有 `ik_retargeting` 和 `fk_adapter` 两个发布者，运行参数 `publish_commanded_ee_state=True`；异常窗口抽样 22 帧 state 均匹配指令 FK，不匹配实测 FK。
-- 当前重点为 T10（下附）；本轮未重启进程、未改运行代码、未下发运动。
+- 当前进程：MessageBridge 101134 / robot_state_publisher 101204 / bridge 101275 / Puppetry 101313 / IK 101370；均存活。
+- bridge 运行参数原文：`control_mode:=movej_canfd -p move_speed:=15.0 -p auto_enable:=false -p use_archive_right_limits:=false`；30485 仅有 T3 `python3 pid=101275` 的 ESTAB 连接。
+- 运动窗口日志原文：`connected=True ... sent=100 rx=477 reject=40 fb_age=0.02s max_err=0.644`，并连续出现 `控制器拒绝运动 movej_canfd program_run_failed`；松开离合后 `sent=0 ... reject=0 max_err=0.000`。
+- 当前 T3 日志累计：`REJECT_COUNT 152`；现场拒绝累计已达约 2940（日志节流输出），以 T3 累计状态为准。
+- **2026-11-06 16:15 更新（ZCode）**：拒绝真因已实锤为**电机7 堵转 → 控制器 state=fault 锁存**（get_device_state 原文见 T28），「50Hz 程序重叠」推测被推翻（lock-step 下发送率仍 50Hz、拒绝依旧）。软件链已连通且 lock-step 上线；堵转 fault 与未使能均已人工恢复（T28）。
 
 ### 历史快照（21:42）
 
@@ -28,7 +28,7 @@
 ### T01 现场状态再核对（接手第一步，必做）
 
 - 优先级：P0
-- 状态：`DONE`（Codex，2026-11-05；22:17 现场核对，证据见 WORKLOG 最新条目）
+- 状态：`DONE`（Codex，2026-11-06 15:47；现场复核，证据见 WORKLOG 最新条目）
 - 依赖：无
 - 说明：上表是 21:42 的快照，现场可能已经变了（有人重启过、机械臂关过机）。
 - 动作：
@@ -40,7 +40,7 @@
 - 验收：把实际 PID、`command_rate_hz` 参数值、拒绝计数写进 WORKLOG；与上表不一致要标出来。
 - 负责：AI
 
-### T02 真机验证 5Hz 是否仍然拒绝（决定性实验）
+### T02 真机验证 5Hz 是否仍然拒绝（决定性实验）【DEAD 2026-11-06：被 T28 推翻——拒绝与发送率无关（lock-step 下仍 50Hz 发送、32/2s 恒定拒绝），真因是电机7 堵转 fault 锁存，本实验失去意义】
 
 - 优先级：P0
 - 状态：`TODO`
@@ -58,7 +58,8 @@
 ### T03 bridge tx 加 movej lock-step（永久修复）
 
 - 优先级：P1
-- 状态：`TODO`
+- 状态：`DONE`（2026-11-06 16:15 实现并上线 movej+movej_canfd 双模式 lock-step；
+  「按离合慢动 sent 稳定、reject=0」的验收因 T28 fault 未清暂缓——见 T28。证据见 WORKLOG 15:58/16:15）
 - 依赖：T02 给出方向（可不等待，直接实现后一起验）
 - 位置：`tools/exton_bridge.py` → `AsyncTcpClient._tx_loop`（第 248 行）
 - 说明：发一帧 movej → 等 rx 收到**该命令**带 `status` 的应答 → 再发下一帧；300ms 超时兜底防死等。
@@ -391,8 +392,8 @@
 
 - 优先级：P1（S2/S3 vendor 黑盒不可加日志的外挂替代，UBT `pink_signal_chain_monitor`
   同款思路；评估见 docs/日志观测性评估.md）
-- 状态：`TODO`（A/B 两项——ik_node 状态行+事件、bridge 窗口化状态行——已随
-  T16/T19 包实现，见 WORKLOG 2026-11-06 03:3x 条目）
+- 状态：`DOING`（Codex，2026-11-06 16:25 上线常驻只读运行：远端
+  `~/桌面/dm-exo/chain_monitor.py`，输出 `flow_1106_1630.csv/.log`；已实测捕获一次控制器失联。验收「手静无误报」与「目标滑移速度对账」仍待完整遥操段）
 - 需求：vendor 组件（MessageBridge/Puppetry）无法内部加日志，本周 T11/T12 归因
   全靠录包离线分析；需要一个独立只读进程在线回答跨模块问题。
 - 规格：新节点 `tools/dm-exo/chain_monitor.py`（仅订阅，零发布，不碰任何控制路径）：
@@ -467,6 +468,7 @@
 
 - 优先级：P0（臂完全不可动）
 - 状态：`DOING`（2026-11-06；**当日第二次复发，且死亡瞬间首次被录包捕获**，证据见 WORKLOG 14:54 条目）
+- Codex 15:56–15:59 只读复核：180 秒包 `monitor_1106_1556.npz` 已完成；两路 CAN 在 5 秒内 TX 各 +2499、RX 均 0。录到两次左离合下目标/IK 活动而反馈样本为 0；bridge 同时被其他操作者重启，须分开分析。具体 fault、触发原因及恢复后跟手仍未验证，详见 WORKLOG 对应条目。
 - 现象：固件正常监听、协议全命令「成功」（含 enable/clear_fault/反馈查询），但 can0/can1
   **TX ~500帧/s 持续、RX=0 冻结**（TX_ERR=RX_ERR=0——收发器 ACK 但电机主控不应答）；
   TCP canfd/movej 帧受理不执行；固件 GUI 自身 movej 也不动。
@@ -492,3 +494,15 @@
 - 动 `192.168.61.60` 的凭据与固件
 - 重装 `pink` venv（ARM64，版本钉死；出问题先问人）
 - 把明文凭据写进任何会外传的地方（Git / 云端 / 聊天工具）
+
+### T28 电机堵转 fault 锁存 → 全拒不下发（2026-11-06 真机实锤）
+
+- 优先级：P0
+- 状态：`DONE`（2026-11-06 16:25 用户确认：就是第五关节堵转导致无法遥操；fault 已清+enable 后恢复。探针证据 motor_id=7 与「第五关节」的电机号↔关节号映射未定，已在持久记忆记录签名）
+- 现象：开机后能遥操一会，随后真臂完全不动；TCP/反馈/IK 全链路正常，bridge 50Hz 下发，控制器恒回 `program_run_failed`（每 2s 恰 32 条错误应答，疑有节流）。
+- 证据（2026-11-06 16:10，probe_device_state.py 原文）：
+  `{"command":"get_device_state","erroeCode":1,"hardwareErrors":[17235970],"motorErrorDetails":[{"general_desc":"电机7 报错","hardware_error_code":17235970,"motor_detail_code":8,"motor_detail_desc":"堵转","motor_id":7}],"softwareErrors":[],"state":"fault"}`
+  当前关节角 J7=-0.043 rad（不在限位），堵转发生在遥操过程中（J7 被指令顶死→过流→锁 fault）。
+- 处置：操作员松离合 → 5566 Web UI 清故障（clear_fault）→ 人工 enable → 重启 T3 → 按离合验证。
+- 遗留风险（新任务候选）：bridge 启动即追 IK 目标与实臂的大偏差（max_err≈1.15），纠偏帧风暴可能诱发堵转/fault；建议加「启动后首个目标偏差>阈值则 hold，等首次按离合再追」。
+- 负责：操作员 + AI

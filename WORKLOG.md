@@ -884,3 +884,134 @@ average rate: 250.762
 - 更新 `HANDOFF.md`：在系统架构入口处增加当前启动脚本和“bridge 连接不等于控制器可运动”
   的醒目标注，指向 5566 enable/fault 检查流程。
 - `git diff --check` 通过；本次只修改本地交接文档，未改变真机运行进程。
+
+## 2026-11-06 15:47 | 遥操中断只读初查 | Codex
+
+- 进程原文 PID：MessageBridge 101134、robot_state_publisher 101204、exton_bridge 101275、Puppetry 101313、ik_node 101370。
+- TCP 原文：`192.168.61.100:37388 192.168.61.60:30485 users:(("python3",pid=101275,fd=19))`，本机仅 T3 一条 ESTAB。
+- T3 原文：`connected=True cmd_rx=173517 sent=9377 fb_synced=True skip=none`；`+2s: sent=100 rx=419 reject=40 fb_age=0.02s max_err=0.619 held=7 jump=0 ik_moved=0`；`控制器拒绝运动 movej_canfd program_run_failed (累计2940)`。
+- 松开后窗口原文：`sent=0 rx=499 reject=0 fb_age=0.03s max_err=0.000 held=14 ik_moved=0`。`REJECT_COUNT 152` 为节流日志行数，不是真实拒绝总数。
+- 当前证实控制器拒绝运动；fault、enable、电机 CAN 活性及本次触发原因未验证。fb_age 小不能证明电机反馈新鲜；约 250Hz 由 cmd_rx 增量推算，独立 topic hz 未取回结果。
+- 控制器只读检查尚未成功：tc 二跳环境报 `sshpass: 未找到命令`，并非控制器内缺少该程序。
+- 现场变更：仅启动后停止本轮只读 topic hz 观察进程，未改远端运行文件，未重启 T1–T5，未发送运动或使能命令。
+- 本地记账纠错：误覆盖 WORKLOG 后已由 HEAD 恢复，恢复后 `git diff -- WORKLOG.md` 无输出；再追加本条。
+
+## 2026-11-06 15:56–15:59 | 180 秒全链只读录包与 CAN 增量核对 | Codex
+
+- 现场变更：运行 `source /opt/ros/humble/setup.bash; export ROS_DOMAIN_ID=42 ROS_LOCALHOST_ONLY=0; python3 /home/tc/桌面/dm-exo/record_compare.py 180 monitor_1106_1556`，已正常结束；产物 `/home/tc/桌面/dm-exo/monitor_1106_1556.npz`。未改远端源码、未发送运动/enable、未重启 T1–T5。
+- 控制器经 SSH ProxyCommand 只读访问，执行 `ip -s link show can0`、`ip -s link show can1`，间隔 5 秒复测。原文数值：can0 TX `81447→83946`，can1 TX `81448→83947`，两路 RX 始终 `0`；后续 TX `125833/125834`、RX 仍 `0`。接口 `ERROR-ACTIVE (berr-counter tx 0 rx 0)` 不等于软件 fault；当前无 bus-off 证据。
+- 控制器 `df -h /`：`26G 5.8G 19G 24%`；时钟原文 `2026-05-21T12:40:58+08:00`，不能直接与 tc 的 11 月 6 日日志对时。`uptime` 后续为 `up 4 min`，控制器近期也启动过；操作者与动作未核实。
+- 并发现场变化：约 15:56:58，bridge PID `101275→106841`，日志 `1793951818.392254147 lock-step 已启用`；随后 `1793951820.359924597 控制器拒绝运动 movej_canfd program_run_failed (累计20)`。本轮未执行该重启；用户明确答复 `有人同时操作软件`。不能将重启前后变化全部归因于原故障。
+- 录包原文统计：`/exo n 165280 first_last [0.000 179.999]`；`/ik n 40679 first_last [0.336 179.995]`；`/rob n 1219 first_last [0.337 49.768] maxgap 25.438 max_range 0.0`，14 轴 `ROB_RANGE` 全为 `0.0`。末端 state 同样最后约 49.77 秒；其后约 130 秒无反馈消息。
+- 左离合事件（包内秒）：`101.829→138.799`、`165.132→176.687`。窗口一 IK `7280` 帧、左臂 J3 范围 `1.03515 rad`，target x 范围 `0.14623m`；窗口二 IK `2282` 帧、target x 范围 `0.22465m`。两个窗口 `/rob samples 0`。右离合始终 0，右 target 未采到消息，不能据此判右侧故障。
+- 独立核对：`timeout 8 ros2 topic echo /client_robot/joint_states --once --no-daemon` 退出 `124`，未收到样本。话题有发布者不代表持续发布。
+- 旧监控缺陷证据：`monitor_chain.log` 在 `15:58:00/02/04/06` 重复同一行 `cmd_rx=310780 sent=15177 ... fb_age=0.04s`；脚本只抓历史最后一条“状态”，不校验时间。这里的 fb_age 不能当作当前健康证据。
+- 结论：本次采集确认 CAN 接收为零，上游输入/目标/IK 在离合窗口仍活动；重启前反馈值冻结，重启附近反馈发布中断。与 T26 历史特征一致，但供电/电机保护/固件状态及触发因果未验证；未捕获最初正常运动→故障瞬间，也未验证恢复后是否跟手。下一步应在同一操作者协调下录取一次完整恢复→运行→首次故障，同时保留控制器 fault 原文，避免同时修改控制路径。
+
+## 2026-11-06 15:58 | T03 lock-step 扩展到 movej_canfd + 真机验证复现根因 | ZCode
+
+### 现场变更
+- 杀掉旧 T3（PID 101275），备份远端 `/home/tc/tcvg/exton_bridge.py.bak_1106_1558`，推送修改版并重启（新 PID 106841，参数 movej_canfd/move_speed=15.0/auto_enable=false 未变）。
+
+### 证据（真机复现，决定性）
+- monitor_chain.log 15:53:13：`sent=11 reject=10 max_err=0.037 held=12` —— 误差 0.037（几乎零偏差）控制器仍拒，排除「偏差大被拒」解释。
+- 全程 `tcp30485=1`、T1/T3/T5 进程数不变、fb_age<0.05s —— 信号链全绿，断点坐实在控制器受理层。
+- 模式：按离合 → sent≈100/2s → 控制器受理前几十帧（「开头能动」）→ 100% program_run_failed 且不自愈（T3_bridge.log `累计5120`）。
+- 新版启动日志原文：`lock-step 已启用：仅运动命令 status 应答解锁，300ms 超时兜底`；`已用 get_joint_position 同步内部关节缓存`；30485 ESTAB 唯一连接。
+
+### 改动内容（tools/exton_bridge.py，已推远端）
+1. `_feed()`：status 应答解锁条件从 `command=='movej'` 扩到 `movej/movej_canfd`（控制器对 canfd 逐帧回 status，sent=100/reject=41 证明应答存在）。
+2. `_tx_loop()`：`is_movej` → `is_motion`（含 canfd），在途未解锁时新目标回写单槽。
+3. 启动日志文案更新。`py_compile` 通过。
+
+### 结论
+- HANDOFF §四 根因（canfd 高频连发 → 程序重叠被拒）已由真机复现验证，T02/T03 合并结案（待跟手实测确认）。
+- 未验证：lock-step 下 canfd 实际下发频率（取决于控制器应答 RTT，若受理帧也回 status 应无感降速；若不回则退化为 ~3Hz，需看 sent 与跟手）。
+
+### 下一步
+- 操作员按住离合连续遥操数分钟：确认全程跟手、reject 恒 0、松开即停。
+
+## 2026-11-06 16:15 | 「不动」定性：电机7 堵转 fault 锁存（T27 立项）+ lock-step 重部署 | ZCode
+
+### 现场变更
+- 发现并清理双 bridge 进程（旧 106841 死锁进程 SIGTERM 杀不掉，`kill -9` 才退出；此前 `pkill -f` 自匹配误杀远端 shell 导致漏杀）。
+- 回滚我 15:56 的推送：该推送误将本地未部署的 T23 WIP 一并上线，其 `_feed` 内层重复加锁 `_state_lock`（非重入）→ rx 线程收到限位帧即自死锁 → 节点回调全阻塞 → 日志/指令冻结。已以现场备份 `bak_1106_1556` 为基底仅叠加 lock-step 三处改动重推（补丁脚本 `tools/patch_lockstep.py`），T23 退回本地。T03 状态改 DONE（跟手验收挂起待 T27）。
+- 新增远端只读探针 `/home/tc/桌面/dm-exo/probe_device_state.py`（本地 `tools/probe_device_state.py`），查询期间短暂停过 T3，查毕已重启（单进程、30485 单 ESTAB 已确认）。
+
+### 证据（探针原文，2026-11-06 16:10）
+- `{"command":"get_device_state","erroeCode":1,"hardwareErrors":[17235970],"motorErrorDetails":[{"general_desc":"电机7 报错","hardware_error_code":17235970,"motor_detail_code":8,"motor_detail_desc":"堵转","motor_id":7}],"softwareErrors":[],"state":"fault","status":"program_run_finish"}`
+- 关节角：`joint[6]（J7）=-0.0428` rad，不在 ±170° 限位 → 堵转发生于遥操过程，非限位卡死。
+- 按离合窗口（16:06:50–16:07:02）监控原文：`ik_moved=1`、`max_err 1.152→1.370` 持续增大（puppet 动、真臂不动）、`sent=100/2s reject=32/2s` 恒定。
+
+### 结论
+- HANDOFF §四「程序重叠」根因被推翻：lock-step 下应答即时返回、发送率仍 50Hz，拒绝依旧；真正根因是**电机7 堵转 → 控制器 state=fault 锁存 → 一切运动帧 program_run_failed**。「开机一会能遥操」= fault 发生前；「之后不能」= fault 锁存后。
+- 监控链路（monitor_chain.log）全程证明 TCP/ROS/进程无断点，信号链假设排除。
+
+### 未验证
+- 32 条/2s 恒定错误应答是否为控制器节流（未证实）；堵转前 J7 是否被纠偏帧风暴顶着打（bridge 启动即追 max_err≈1.15 的大偏差，机制成立但诱发关系未验证）。
+
+### 下一步
+- 操作员：松离合 → 5566 清故障 → 人工 enable → 按离合验证跟手（T27 验收）。
+- AI 候选改进：bridge 启动大偏差 hold 逻辑（防纠偏帧风暴），待 T27 清障后评估。
+
+## 2026-11-06 16:16 | 一键重启全链路（restart_teleop.sh）| ZCode（用户指令）
+
+- 执行 `bash ~/桌面/dm-exo/restart_teleop.sh`：T1–T5 清场后全部拉起。
+- AGENTS §3.1 四判据全过：T3「已连接并同步反馈」、30485 唯一 ESTAB、cmd_rx=1337、无离合基线 `sent=0 reject=0 max_err=0.000`（日志原文见脚本输出）。
+- 本次启动 `max_err=0.000`（IK 重新同步到臂当前位姿），未复现启动纠偏帧风暴。
+- monitor_chain.sh 独立于 T1–T5，未被脚本清理，持续采样中。
+
+## 2026-11-06 16:19 | fault 已清，定性更新：控制器 ready 未使能 | ZCode
+
+### 证据（探针原文，16:17）
+- `motorErrorDetails":null,"softwareErrors":[],"state":"ready"` —— 电机7 堵转 fault 已消失。
+- 同期按离合窗口：`ik_moved=1 sent=100/2s reject=32/2s max_err 0.52→1.03→0.72` —— ready 未使能状态拒绝一切运动帧，错误应答限流 ~16/s。
+
+### 结论修正（相对 16:15 条目）
+- 堵转 fault 是上一轮「完全不动」的原因，现已被清除（臂重启或人工清障）。
+- 当前「不动」的唯一缺环 = **人工 enable**（auto_enable=false 门禁，不可远程绕过）。
+- T3 已在探针查询后重启恢复（单进程、30485 单 ESTAB、已同步）。
+
+### 下一步
+- 操作员在 5566 Web UI 人工 enable → 按离合验证。reject 应归零、跟手。
+
+## 2026-11-06 16:25–16:30 | 全流程监视器上线（T21）+ CAN 判据纠错 | Codex
+
+### 现场变更
+- 新增只读监视器 `tools/dm-exo/chain_monitor.py`（本地新增，已推远端 `/home/tc/桌面/dm-exo/chain_monitor.py`，未改任何控制路径文件），
+  以 `setsid nohup ... chain_monitor.py flow_1106_1630 0` 常驻；stdout 落 `logs/monitor_1630.out`，
+  指标 `flow_1106_1630.csv`，事件 `flow_1106_1630.log`。进程 PID 见 `pgrep -af chain_moni[t]or`。
+- 另在本机起只读 CAN 计数轮询（每 5s，仅读 `/sys/class/net/canX/statistics`），日志 `/tmp/dmexo_can_1106.log`。
+- 期间未发送运动/使能，未重启 T1–T5。启动脚本时踩到 AGENTS 禁忌①：`pkill -f` 与同一命令行里的
+  `chain_monitor.py` 自匹配，ssh 会话被杀（exit 255）；改为按 PID 结束后正常启动。
+
+### 证据
+- 16:27:09–16:27:43 控制器 `.60` 完全失联：tc `ping 192.168.61.60` 100% 丢包，`ip neigh` 为 `INCOMPLETE`，
+  同时 30485 仍是 ESTAB 且 `Send-Q` 51119 字节堆积 —— TCP 假连接。
+- 同期 T3 原文：`fb_age=54.21s … skip=fbstale … max_err=0.120`，一路涨到 `fb_age=62.21s`；
+  16:27:24 恢复 `skip=none sent=48 fb_age=0.03s max_err=0.815`。即该次断联约 60s，随后控制器重新上线
+  （CAN TX 计数从 12.5 万回到 1.1 万，说明控制器重启过）。
+- 监视器输出示例（16:29:20）：`rob=50Hz/0.02s frozen=0.0s bridge_fb_age=0.02s skip=none sent=15990 clutch=10 errL=0.747`，
+  同窗口 T3 `reject=0`；16:29 三次 `/client_robot/joint_states` 读数为
+  `J1 -0.33335→-0.37046`、`J3 -0.21639→-0.17996`、`J4 0.04247→0.08897` —— 真机确实在动。
+
+### 判据纠错（推翻我 15:56 条目中「CAN RX=0 = 电机失联」的用法）
+- 控制器两路 CAN 在**机械臂正常运动时依然 RX=0、TX≈500帧/s**（16:29:45–16:29:57 原文 `0 20271 0 20270` → `0 26250 0 26250`）。
+  因此 **RX=0 不能作为电机不应答/死亡的判据**，本机 CAN FD 反馈不走这两个接口的 RX 计数。
+- 有效判据改为：T3 `fb_age/skip=fbstale`、`/client_robot/joint_states` 数值冻结、IK 指令-反馈误差持续增大、
+  `reject` 增长，以及控制器 `.60` 的 ping/ARP 连通性。
+
+### 结论与未验证
+- 监视器已能同时看到上游、IK、反馈新鲜度、bridge 自身判断和拒绝计数，并已实测捕获一次控制器失联/重启。
+- 仍在运行的这段尚未捕获「运行中首次故障」全程；16:27 的失联与控制器的重启操作是否同一动因未验证。
+
+### 下一步
+- 操作员照常连续遥操（远端 MONITOR 为只读常驻）；故障发生时不急着重启，先喊一声并保留 5566 页面故障码，
+  便于把「首次拒绝/冻结」时刻与控制器 state 对齐。
+
+
+## 2026-11-06 16:25 | T27 结案：用户确认第五关节堵转 | ZCode
+
+- 用户确认「突然无法移动=第五关节堵转」。探针原文 motor_id=7 与关节号的映射未定，一并记录。
+- 堵转→fault 锁存签名（含 probe_device_state.py 诊断法、ready=未使能、恢复序）已写入持久记忆 exon2-hardware-hazards。
+- T27 状态 DONE；lock-step（T03）随本版提交。

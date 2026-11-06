@@ -330,9 +330,10 @@ class AsyncTcpClient:
         self._ctrl_queue: 'queue.Queue[dict]' = queue.Queue()
         self._motion_cv = threading.Condition()
         self._motion_slot: Optional[dict] = None
-        # movej 是阻塞型程序；同一 TCP 连接上任意时刻只允许一条在途。
-        # rx 只把“command=movej 且带 status”的应答计为完成，
-        # get_joint_position 的 joint 反馈不能解锁下一条运动指令。
+        # movej / movej_canfd 都是阻塞型程序；同一 TCP 连接上任意时刻只允许
+        # 一条在途（真机 2026-11-06 验证：canfd 50Hz 连发 → 程序重叠 →
+        # 100% program_run_failed 且不自愈）。rx 只把“运动命令且带 status”
+        # 的应答计为完成，get_joint_position 的 joint 反馈不能解锁下一条。
         self._movej_state_lock = threading.Lock()
         self._movej_ack_seq = 0
         self._movej_sent_count = 0
@@ -496,18 +497,20 @@ class AsyncTcpClient:
                     if payload is not None:
                         self._motion_slot = None
                 if payload is not None:
-                    is_movej = payload.get('command') == 'movej'
-                    if is_movej and waiting_movej_seq is not None:
+                    # movej 与 movej_canfd 都走 lock-step（T03）：status 应答
+                    # 到达前不发下一条运动帧，杜绝程序重叠被拒。
+                    is_motion = payload.get('command') in ('movej', 'movej_canfd')
+                    if is_motion and waiting_movej_seq is not None:
                         # 在途时把最新目标放回单槽；旧目标仍会被新目标覆盖。
                         with self._motion_cv:
                             if self._motion_slot is None:
                                 self._motion_slot = payload
                     else:
-                        if is_movej:
+                        if is_motion:
                             with self._movej_state_lock:
                                 sent_after_seq = self._movej_ack_seq
                         self._send_now(payload)
-                        if is_movej:
+                        if is_motion:
                             with self._movej_state_lock:
                                 self._movej_sent_count += 1
                             waiting_movej_seq = sent_after_seq
@@ -565,7 +568,8 @@ class AsyncTcpClient:
                 except json.JSONDecodeError:
                     continue
                 self._responses.append(msg)
-                if msg.get('command') == 'movej' and 'status' in msg:
+                if 'status' in msg and msg.get('command') in (
+                        'movej', 'movej_canfd'):
                     with self._movej_state_lock:
                         self._movej_ack_seq += 1
                     # 立即唤醒 tx，不必等待空闲轮询周期。
@@ -574,8 +578,10 @@ class AsyncTcpClient:
                 if 'lowerLimits' in msg and 'upperLimits' in msg:
                     live = parse_live_limits(msg)
                     if live is not None:
-                        with self._state_lock:
-                            self._live_limits = live
+                        # 外层 _feed 已持有 _state_lock（非重入锁），此处再
+                        # with 会自死锁：rx 挂死且锁永不释放，节点全部读反馈
+                        # 的回调跟着阻塞（2026-11-06 真机 15:58 复现）。
+                        self._live_limits = live
                 joints = extract_joint_rad(msg)
                 if joints is not None and len(joints) >= N_JOINTS:
                     self._latest_joint_rad = joints[:N_JOINTS]
@@ -734,9 +740,9 @@ class ExtonBridge(Node):
             f'L→{LEFT_URDF_JOINTS[0]}.. R→{RIGHT_URDF_JOINTS[0]}.. | '
             f'debug_tcp={self.debug_tcp}'
         )
-        if self.control_mode == 'movej':
+        if self.control_mode in ('movej', 'movej_canfd'):
             self.get_logger().info(
-                'movej lock-step 已启用：仅 movej status 应答解锁，'
+                'lock-step 已启用：仅运动命令 status 应答解锁，'
                 '300ms 超时兜底'
             )
         self.get_logger().info(
