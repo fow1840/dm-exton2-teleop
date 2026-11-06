@@ -5,6 +5,7 @@ import rclpy
 from rclpy.node import Node
 import numpy as np
 import pinocchio as pin
+from robot_ik_retargeting.master_slave_map import ArmPoseMap
 import pink
 from pink import solve_ik
 from pink.tasks import FrameTask, PostureTask, DampingTask
@@ -193,6 +194,19 @@ class UniversalHumanIK(Node):
         self.declare_parameter('mirror_xyz', [1.0, 1.0, 1.0])
         self.declare_parameter('mirror_xyz_left', [-1.0, -1.0, -1.0])
         self.declare_parameter('mirror_xyz_right', [1.0, 1.0, 1.0])
+        # T29 主从方向映射：标定文件优先；否则 position_map/orientation_map 逐元素给 3×3
+        # （9 个数按行展开，全 0 = 用旧行为 diag(mirror)/单位阵）。任何非法配置启动即报错，
+        # 不做静默回退——方向映射错比不起臂更危险。
+        self.declare_parameter('calib_file_left', '')
+        self.declare_parameter('calib_file_right', '')
+        self.declare_parameter('position_map_left', [0.0] * 9)
+        self.declare_parameter('position_map_right', [0.0] * 9)
+        self.declare_parameter('position_scale_left', 1.0)
+        self.declare_parameter('position_scale_right', 1.0)
+        self.declare_parameter('orientation_map_left', [0.0] * 9)
+        self.declare_parameter('orientation_map_right', [0.0] * 9)
+        self.declare_parameter('orientation_scale_left', 1.0)
+        self.declare_parameter('orientation_scale_right', 1.0)
         self.declare_parameter('publish_commanded_ee_state', True)
         # 仅抑制噪声，勿用大切换死区（会卡顿）
         self.declare_parameter('position_deadband_m', 0.002)
@@ -212,6 +226,7 @@ class UniversalHumanIK(Node):
                 [float(x) for x in self.get_parameter('mirror_xyz_right').value], dtype=float
             ),
         }
+        self.pose_map = {side: self._build_pose_map(side) for side in ['left', 'right']}
         self.position_deadband_m = float(self.get_parameter('position_deadband_m').value)
         self.orientation_deadband_rad = float(
             self.get_parameter('orientation_deadband_rad').value
@@ -273,6 +288,13 @@ class UniversalHumanIK(Node):
         self._stat_await = {'left': 0, 'right': 0}    # 安定等待拍数
         self._prev_frozen = {'left': None, 'right': None}  # 冻结沿检测
 
+        for side in ['left', 'right']:
+            m = self.pose_map[side]
+            self.get_logger().info(
+                f'pose_map[{side}] pos_scale={m.position_scale} orn_scale={m.orientation_scale} '
+                f'P_map={np.round(m.position_map, 4).tolist()} '
+                f'O_map={np.round(m.orientation_map, 4).tolist()}'
+            )
         self.get_logger().info(
             f'IK INCREMENTAL teleop (pos+orn) | pos_cost={pos_cost} orn_cost={orn_cost} '
             f'mirror L={self.mirror_xyz["left"].tolist()} R={self.mirror_xyz["right"].tolist()} '
@@ -374,15 +396,36 @@ class UniversalHumanIK(Node):
         self.latest_target_in_ref[side] = T_new
         self.last_target_time[side] = now_s
 
+    def _build_pose_map(self, side):
+        """按臂构造 ArmPoseMap：标定文件 > 显式参数 > 旧行为（diag(mirror)）。
+
+        validate() 不过就抛异常终止启动——禁止带着错误映射起臂。
+        """
+        calib = str(self.get_parameter(f'calib_file_{side}').value or '')
+        if calib:
+            m = ArmPoseMap.load_json(calib)
+            return m
+        pm = [float(x) for x in self.get_parameter(f'position_map_{side}').value]
+        om = [float(x) for x in self.get_parameter(f'orientation_map_{side}').value]
+        p_map = np.array(pm, dtype=float).reshape(3, 3) if any(pm) else None
+        o_map = np.array(om, dtype=float).reshape(3, 3) if any(om) else None
+        return ArmPoseMap(
+            position_map=p_map if p_map is not None else np.diag(self.mirror_xyz[side]),
+            position_scale=float(self.get_parameter(f'position_scale_{side}').value),
+            orientation_map=o_map,
+            orientation_scale=float(self.get_parameter(f'orientation_scale_{side}').value),
+        )
+
     def _incremental_desired(self, side, T_exo, T_robot0, T_exo0):
         """基座系增量：按下后外骨骼（Puppetry目标）怎么动，机器人末端跟同样相对位姿变化。
-        位置可按臂 mirror；姿态用目标相对旋转叠到按下时机器人姿态上。
+        方向/比例全在 self.pose_map[side]（master_slave_map.ArmPoseMap，可标定可落盘）；
+        默认参数与 2026-11-06 前的 mirror 公式逐位一致（离线测试 A 类保证）。
         """
-        mirror = self.mirror_xyz[side]
-        dp = (np.array(T_exo.translation) - np.array(T_exo0.translation)) * mirror
-        p_des = np.array(T_robot0.translation) + dp
-        R_delta = T_exo.rotation @ T_exo0.rotation.T
-        R_des = R_delta @ T_robot0.rotation
+        p_des, R_des = self.pose_map[side].apply(
+            T_exo.rotation, T_exo.translation,
+            T_exo0.rotation, T_exo0.translation,
+            T_robot0.rotation, T_robot0.translation,
+        )
         return pin.SE3(R_des, p_des)
 
     def control_loop(self):

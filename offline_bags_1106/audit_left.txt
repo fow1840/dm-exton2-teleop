@@ -1,0 +1,82 @@
+数据目录: /home/dm/下载/dm-exton2-teleop/offline_bags_1106  包数: 56  臂: left（14 关节中取 [7, 8, 9, 10, 11, 12, 13]）
+
+===== LEFT 臂审计 =====
+可用包: 9  跳过: 47  增量样本: 4435  净量段: 12
+  [用] press01_left_230820.npz: 605 样本/1 段
+  [用] press01_left_231821.npz: 720 样本/1 段
+  [用] press02_left_142621.npz: 162 样本/1 段
+  [用] press02_left_231854.npz: 473 样本/1 段
+  [用] press03_left_142721.npz: 1337 样本/1 段
+  [用] press04_left_221400.npz: 44 样本/1 段
+  [用] clutch_test2.npz: 564 样本/4 段
+  [用] dir01_left.npz: 188 样本/6 段
+  [用] left_direction_1106_live01.npz: 324 样本/3 段
+  [弃] press01_left_142611.npz: 12 样本/1 段
+  [弃] press01_left_201033.npz: 无 /clutch_left_v
+  [弃] press01_left_201416.npz: 无 /clutch_left_v
+  [弃] press01_right_215803.npz: 0 段全冻结（按住但真机未动）
+  [弃] press01_right_220602.npz: 0 段全冻结（按住但真机未动）
+  [弃] press01_right_221254.npz: 0 段全冻结（按住但真机未动）
+  [弃] press02_left_201419.npz: 无 /clutch_left_v
+  [弃] press02_left_215824.npz: 1 段全冻结（按住但真机未动）
+  [弃] press02_right_221259.npz: 0 段全冻结（按住但真机未动）
+  [弃] press03_left_201422.npz: 无 /clutch_left_v
+  [弃] press03_left_221328.npz: 6 样本/1 段
+  [弃] press03_right_215824.npz: 1 段全冻结（按住但真机未动）
+  [弃] press04_left_201436.npz: 无 /clutch_left_v
+  [弃] press05_left_201441.npz: 无 /clutch_left_v
+  [弃] press06_left_201457.npz: 无 /clutch_left_v
+  [弃] press07_left_201504.npz: 无 /clutch_left_v
+  [弃] press08_left_201650.npz: 无 /clutch_left_v
+  [弃] press09_right_203005.npz: 无 /clutch_left_v
+  [弃] press10_right_203010.npz: 无 /clutch_left_v
+  [弃] press11_right_203014.npz: 无 /clutch_left_v
+  [弃] press12_right_203019.npz: 无 /clutch_left_v
+  [弃] press13_right_203023.npz: 无 /clutch_left_v
+  [弃] press14_left_203025.npz: 无 /clutch_left_v
+  [弃] press15_left_203028.npz: 无 /clutch_left_v
+  [弃] press16_left_203029.npz: 无 /clutch_left_v
+  [弃] press17_right_203254.npz: 无 /clutch_left_v
+  [弃] press18_right_203950.npz: 无 /clutch_left_v
+  [弃] press19_right_204007.npz: 无 /clutch_left_v
+  [弃] press20_right_204011.npz: 无 /clutch_left_v
+  [弃] press21_right_204245.npz: 无 /clutch_left_v
+  [弃] press22_left_204331.npz: 无 /clutch_left_v
+  [弃] press23_left_204332.npz: 无 /clutch_left_v
+  [弃] press24_left_204334.npz: 无 /clutch_left_v
+  [弃] press25_left_204335.npz: 无 /clutch_left_v
+  [弃] press26_left_204337.npz: 无 /clutch_left_v
+  [弃] press27_left_204339.npz: 无 /clutch_left_v
+  [弃] press28_left_204340.npz: 无 /clutch_left_v
+  [弃] press29_left_204341.npz: 无 /clutch_left_v
+  [弃] press30_right_204356.npz: 无 /clutch_left_v
+  [弃] press31_right_204401.npz: 无 /clutch_left_v
+  [弃] press32_left_204647.npz: 无 /clutch_left_v
+  [弃] clutch_test.npz: 0 段全冻结（按住但真机未动）
+  [弃] left_baseline_1106_1701.npz: 0 段全冻结（按住但真机未动）
+  [弃] left_stuck_1106_1742.npz: 3 段全冻结（按住但真机未动）
+  [弃] monitor_1106_1556.npz: 0 段全冻结（按住但真机未动）
+  [弃] verify_fix.npz: 0 段全冻结（按住但真机未动）
+  [弃] verify_fix2.npz: 0 段全冻结（按住但真机未动）
+
+指令号跟踪（ik→rob 数值层；恒应≈+1。物理轴翻转在此层面不可见，见 T30）:
+  J1: TRACK 中 r=+0.71 lag=12帧
+  J2: WEAK r=+0.36 lag=10帧（激励不足或间歇跟踪）
+  J3: TRACK 中 r=+0.72 lag=20帧
+  J4: TRACK 中 r=+0.73 lag=12帧
+  J5: TRACK 中 r=+0.70 lag=17帧
+  J6: TRACK 强 r=+0.90 lag=12帧
+  J7: WEAK r=+0.57 lag=17帧（激励不足或间歇跟踪）
+
+净量符号投票（行=ik，列=rob；段数=12）与跟踪增益:
+  J1: 对角投票 +8  增益 median=0.62（n=10）
+  J2: 对角投票 +8  增益 median=0.97（n=9）
+  J3: 对角投票 +8  增益 median=0.89（n=10）
+  J4: 对角投票 +10  增益 median=0.97（n=11）
+  J5: 对角投票 +10  增益 median=0.76（n=10）
+  J6: 对角投票 +12  增益 median=0.68（n=8）
+  J7: 对角投票 +10  增益 median=0.99（n=11）
+
+外骨骼末端增量敏感表（样本 1714，单位 rad/m；ik=软件期望，rob=机器数值实际）:
+  [ik] 关节: J1=X--2.1  J2=Y++1.4  J3=Y++3.6  J4=Y--2.1  J5=Y++7.6  J6=Y++2.4  J7=Y--9.3
+  [rob] 关节: J1=X--1.5  J2=Y++0.8  J3=Y++1.9  J4=Y--1.7  J5=Y++2.9  J6=Y++3.3  J7=Y--4.3

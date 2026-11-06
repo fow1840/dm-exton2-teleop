@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   HR-UP-7DOF-3KG-R-B01382 修复版 (2026-10-30)
+  双臂限位于2026-11-06按get_config内缩0.02rad与现场bridge对齐（左臂当日17:24先行，右臂18:1x补齐）。
   本包结构仿 SolidWorks 原始导出包 HR-UP-7DOF-3KG-R-B01382-URDF-1029。
   ROS2 包名: hr_up_7dof_fixed (原包名含 '-' 不符合 ROS 包名规范, 目录名保留原名风格)
   基于 SW 原始导出修正:
   1. mesh 路径改为 package://hr_up_7dof_fixed/meshes/ (自包含)
   2. 14 个关节限位从 0/0 修复为 ±2.967 rad (参考同类 7-DOF 臂)
+     2b. 左臂 Joint1L~Joint7L 改用控制器 get_config 实测软限位并内缩 0.02rad
+         (2026-11-06, 与 exton_bridge.py 的 LIVE_LIMITS_RAD 同值)；
+         旧值 ±2.967 比真机宽, 会让 IK 目标越过 bridge 裁剪线而与真机失配。
+         2c. 右臂 Joint1~Joint7 同日改用同表（控制器 get_config 18:10 原文：
+             upper=[2.79,0.26,2.79,2.26,2.79,1.57,2.79]×2臂, lower=[-2.79,-2.3562,...]×2臂,
+             双臂对称; 内缩 0.02rad 后即 LIVE_LIMITS_RAD），右臂不再特例。
   3. 新增 base_link 根节点 + 固定安装变换 rpy=(-pi/2,-pi/2,0), 抬高 1.244m:
      整体由装配倒伏姿态改为竖直站立 (背板底端落在 z=0 地面), 零位双臂自然下垂
   4. 左臂 Joint1L~Joint7L origin 按右臂严格镜像重写 (修复 SW 装配 frame 混乱;
@@ -117,8 +124,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -175,8 +182,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.3362"
+      upper="0.24"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -233,8 +240,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -291,8 +298,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-0.67"
+      upper="2.24"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -349,8 +356,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -407,8 +414,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-1.55"
+      upper="1.55"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -465,8 +472,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -523,8 +530,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -581,8 +588,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.3362"
+      upper="0.24"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -639,8 +646,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -697,8 +704,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-0.67"
+      upper="2.24"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -755,8 +762,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -813,8 +820,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-1.55"
+      upper="1.55"
       effort="100"
       velocity="6.28" />
   </joint>
@@ -871,8 +878,8 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.967"
-      upper="2.967"
+      lower="-2.77"
+      upper="2.77"
       effort="100"
       velocity="6.28" />
   </joint>

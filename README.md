@@ -87,7 +87,8 @@ setsid nohup python3 /home/tc/tcvg/exton_bridge.py --ros-args \
 1. **先看 [HANDOFF.md](./HANDOFF.md) §四** —— 当前唯一阻塞项（program_run_failed）的根因分析与修复方案。
 2. **[TASKS.md](./TASKS.md)** —— 9 条接手任务，带优先级、依赖、验收标准和负责人（哪些必须人工配合）。
 3. **[AGENTS.md](./AGENTS.md)** —— pkill 自匹配、TCP 单连接、TF 锁存等今天踩过的坑，能省好几小时。
-4. 代码入口：
+4. **[docs/机器人现场调试手册.md](./docs/机器人现场调试手册.md)** —— 现场调试工作方式：快速实验驱动模式（假设 → 单变量最小修改 → 真机验证 → 保留/回退），实验记录模板见其 §4.1。
+5. 代码入口：
    - IK：`ros2_ws/src/robot_ik_retargeting/robot_ik_retargeting/ik_node.py`
    - bridge：`tools/exton_bridge.py`（`AsyncTcpClient._tx_loop` 在第 248 行，待改 lock-step）
    - FK：`ros2_ws/src/robot_fk_adapter/robot_fk_adapter/joint_to_pose_adapter.py`

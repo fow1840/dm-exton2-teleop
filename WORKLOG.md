@@ -885,6 +885,16 @@ average rate: 250.762
   的醒目标注，指向 5566 enable/fault 检查流程。
 - `git diff --check` 通过；本次只修改本地交接文档，未改变真机运行进程。
 
+## 2026-11-06 16:46–16:47 | 再次重启：修复 T5 参数设置竞态后通过 | Codex + 操作员
+
+- 首次 `restart_teleop.sh` 清场及 T1–T5 启动均完成，但 T5 节点尚未注册时参数设置返回
+  `Node not found`，脚本按设计退出；这属于启动脚本竞态，不是 bridge/30485 故障。
+- `start_teleop.sh` 已改为等待 T5 节点并最多重试 20 次设置
+  `publish_commanded_ee_state=false`；远端备份后同步，`bash -n` 通过，SHA256=
+  `5275b9317fc08970419aa4f9e0743931c655926f72f23fa34effc6267a0d825f`。
+- 第二次重启成功：T1–T5 全绿，T3 `connected=True`、`fb_synced=True`、`cmd_rx=834`；
+  无离合基线 `sent=0`、`reject=0`、`max_err=0.000`、`ik_moved=0`。
+
 ## 2026-11-06 15:47 | 遥操中断只读初查 | Codex
 
 - 进程原文 PID：MessageBridge 101134、robot_state_publisher 101204、exton_bridge 101275、Puppetry 101313、ik_node 101370。
@@ -1015,3 +1025,313 @@ average rate: 250.762
 - 用户确认「突然无法移动=第五关节堵转」。探针原文 motor_id=7 与关节号的映射未定，一并记录。
 - 堵转→fault 锁存签名（含 probe_device_state.py 诊断法、ready=未使能、恢复序）已写入持久记忆 exon2-hardware-hazards。
 - T27 状态 DONE；lock-step（T03）随本版提交。
+
+## 2026-11-06 16:5x | 末端增量方向与灵敏度只读分析，交接 T29 | Codex
+
+- 用户现象：外骨骼遥操作方向体感混乱，且过于灵敏；本轮按分析范围执行，只读源码、运行参数
+  和录包，未修改/重启控制链，未下发运动。
+- 源码定责：`ik_node._incremental_desired()` 使用离合锚点后的末端相对位姿增量：位置为
+  `(T_exo.translation-T_exo0.translation)*mirror` 后加到机器人锚点；姿态为
+  `T_exo.rotation*T_exo0.rotation.T` 直接左乘机器人锚点。不是外骨骼关节角直接映射。
+- 运行参数原文：左 `mirror_xyz_left=[-1,1,1]`、右 `[1,1,1]`、orientation cost=40；
+  bridge `control_mode=movej_canfd`、50Hz、`max_joint_step_rad=0.2`、`follow_ratio=1.0`。
+  T3 同期健康：`connected=True`、`fb_synced=True`、`sent=0`、`reject=0`、
+  `max_err=0.000`（无离合基线）；只读 chain_monitor 仍运行。
+- 数据复核：`monitor_1106_1556.npz` 左 target 与 `/ee_poses` 左末端位置的同轴相关
+  x/y/z≈0.993/0.955/0.998；动作不是纯轴，不能直接求标定矩阵。结合
+  `dir01_left.npz` 上游 corr=1 与 T20 URDF 结构性差异，方向问题至少包含“输入坐标映射不完整”
+  和“URDF→真机模型错误”两层。
+- 交接方案已写 TASKS T29：新增每臂完整 3×3 平移映射和位置/姿态比例；先关姿态、0.30 平移
+  倍率做 ±X/±Y/±Z 采集，再做姿态共轭变换与 0.20 倍率；bridge 步进上限建议 0.02rad，
+  canfd 保持 50Hz。`move_speed=15` 在 canfd payload 中不使用，不能靠它降速。
+- 当前未部署任何上述建议；下一 AI 必须先离线回归，并由 donghai 确认真机校准窗口。
+
+## 2026-11-06 17:00 | T01 / T29 左臂方向测试接手与只读基线 | Codex
+
+- 动作：经 SSH 核对进程、30485 连接、ROS 参数/话题；执行 `source /opt/ros/humble/setup.bash && export ROS_DOMAIN_ID=42 ROS_LOCALHOST_ONLY=0 && python3 /home/tc/桌面/dm-exo/record_compare.py 8 left_baseline_1106_1701`；拉取 T3 日志及 NPZ 到本机 `/tmp/`，用 numpy 核对样本和变化范围。
+- 证据原文：`2026-11-06T17:00:32+08:00`；`Boolean value is: False`；`Double values are: array('d', [-1.0, 1.0, 1.0])`；30485 `users:(("python3",pid=154127,fd=19))`。
+- 证据原文：`已保存: /home/tc/桌面/dm-exo/left_baseline_1106_1701.npz`；`8.1s | /exo:836Hz /ik:226Hz /rob:49Hz /ee_op:835Hz`；`/rob_v samples 401 range [0.0, 0.0, 0.0, 0.0, 0.0, 9.6e-05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]`；左臂名称位于后7轴 `Joint1L`–`Joint7L`。
+- 证据原文：T3 `已连接控制器`、`已用 get_joint_position 同步内部关节缓存`；`cmd_rx=55363 sent=3152 ... +2s: sent=0 rx=484 reject=0 ... max_err=0.000`；拉取日志的 `program_run_failed` 匹配数 0。
+- 结论：软件链和基线采集可用，尚无本轮按离合的方向样本；静置反馈不能证明执行层可用。当前末端增量控制不能保证肩肘构型逐一模仿。
+- 未验证：T24 左肘检修状态、真机六方向/肩肘腕运动对应关系、真实 TCP 与模型 FK 一致性。
+- 下一步：操作员确认硬件可测后，按身体坐标分次测试前后、左右、上下，再做肩/肘/腕单动作；每次按离合前静置、动作后松开并标注实际方向。T29 保持 BLOCKED 等人工就绪。
+- 现场变更：仅运行一次只读录制器并新增上述 NPZ；无重启、无参数变更、无远端源码变更、无人工运动指令。
+
+## 2026-11-06 17:0x | T29 左臂直接上手测试开始 | Codex + 操作员
+
+- 动作：用户明确要求直接上手反馈；已执行 `python3 -u /home/tc/桌面/dm-exo/record_compare.py 180 left_direction_1106_live01`（ROS_DOMAIN_ID=42），记录外骨骼/末端目标/IK/真机反馈/离合。
+- 证据原文：`开始录制 180s ...`；本机命令 ID `job-83a33baef5d244ceacbb10c075cea171`，启动后状态 `Running`。
+- 结论：录制已启动；尚未收到操作员方向反馈，尚未验证数据落盘及方向对应关系。上条“保持 BLOCKED”已由用户本次直接测试指令取代，任务现为 DOING。
+- 下一步：取回 `left_direction_1106_live01.npz`，结合操作员按序动作描述分析左臂。
+- 现场变更：启动只读录制器；未改运行参数或控制源码，未重启控制链。
+
+## 2026-11-06 17:2x | T20/T29 左臂「RViz 显示相反」修复尝试：离线五路枚举全否证 + 真机探针被 fault 阻断 | ZCode
+
+- 动作：应「直接修改 RViz 左臂显示并验证」指令，先后执行：
+  ① 离线符号枚举（±1^7，位置残差）→ 最优 [1,-1,-1,1,1,1,-1] 位置 median=488mm，不可救；
+  ② 置换×符号全枚举（5040×128，位置+姿态）→ 最优 score 残差 336mm/105°，不可救；
+  ③ 置换×符号+LM 零偏拟合（top400 候选）→ 最优 rms 554mm，不可救；
+  ④ 差分 FK 方向枚举（基座无关，4 对有效位移）→ top12 全部收敛符号模式 [1,-1,1,-1,1,-1,1]
+    （identity 对照 score 0.28 vs 候选 2.44，符号层高置信），但置换不可辨；
+  ⑤ 基座(6)+工具(1)+四元数约定(wxyz/xyzw/共轭×2)×符号 联合拟合 → 姿态残差全部 37.9°–49.8°，
+    无一塌缩；位置恒亚毫米（自由基座吸收），判据失效。
+  ⑥ 17:06 实测包 `left_direction_1106_live01.npz` 逐轴互相关（按压段 526 指令增量样本）：
+    对角线相关 0.00–0.25，最大跨轴 -0.34 → 真机无一致方向响应，符号表不可提取。
+- 证据原文（数据缺陷根因）：`calib_samples_L_1106_0943.jsonl` 5 组残差全等（512.8mm/64.3°）
+  → 5 组实为同一位姿；`L_drive/L2_drive` 仅 6 组，去重后有效独立位姿约 4 个 → 样本量不足，
+  「结构性不可救」结论仅对现有数据成立，不排除真机在线后单轴探针翻案。
+  另：`dir01_left.npz` 的 `/rob_v` 与 `/ik_v` 左臂逐点相等 → 该包反馈列是指令回声，不可用于对账。
+- 现场证据：`urdf_axis_probe.py left` 首行 `初始 state: fault` → `!! 控制器非就绪`，退出码 1。
+  （echo of live01：录制末端 1/3 段 max|rob-ik|≈0 → 测试中反馈再冻结，与 fault 一致）
+- 结论：①RViz 左臂显示错误 = URDF 左链关节符号/结构与真机不一致（T20 已定责），符号层修法
+  高置信存在（④），但翻转表必须真机单轴微扰实测，离线路线已全部否证；
+  ②当前阻断 = 控制器 fault 锁存，需人工在示教器 5566 清故障 + enable（auto_enable=false 红线不动）。
+- 现场变更：杀 bridge pid 119723（探针前置）；探针未发任何运动指令（state 校验即退）。
+  17:3x 已按 canfd 基线重启 bridge（pid 见日志尾），恢复后核验：`connected=True`、`fb_synced=True`、
+  30485 单 ESTAB、无离合基线 `sent=0 reject=0 max_err=0.000`。
+- 远端新增文件（只读分析工具，未动运行代码）：
+  /home/tc/tcvg/urdf_fk_calib/{perm_search,perm_offset,delta_search,right_chain_test,base_fit_orient,sign_verify,quat_conv_test,corr_analysis}.py
+- 下一步：操作员清 fault + enable 后，一条命令即可拿翻转表：
+  `pink/bin/python urdf_axis_probe.py <hr_up URDF> left`，输出 INVERTED/ALIGNED 逐轴判定；
+  然后按表改 URDF 左链 axis（display+FK+IK 同步生效）并在 bridge 左臂收发两侧加同表符号映射
+  （先离线回归 record_compare，再真机验证）。在此之前不要凭 ④ 的未定置换盲改显示。
+
+## 2026-11-06 17:0x-17:25 | T06/T29 左臂限位对齐部署 | Codex + 操作员
+
+- 动作：
+  1. 读 `机器人手眼标定平台系统信息档案.docx`（2026-07-06，右臂软限位表）。
+  2. 拉回 `left_direction_1106_live01.npz`（180s）→ 逐轴 rad2deg 极值。
+  3. 比对本地/远端 URDF 与 bridge `LIVE_LIMITS_RAD`，只在本地 URDF 补 2b 注释；
+     未改任何限位数值（本地 7 轴本就是实测值）。
+  4. 备份远端两份 URDF（`*.bak_1106_1723`）→ scp 覆盖 src → install 为指向 src 的软链。
+  5. `~/桌面/dm-exo/restart_teleop.sh` 整链重启（17:24:16）+ 起 240s 录制
+     `left_limitfix_1106_1725`。
+- 证据原文：
+  - docx：`j5 -89.95 89.95`、`j7 -154.70 154.70`；docx 自述 `程序实时读取到的右臂各关节软限位（2026 年 7 月 6 日）`
+  - `get_config`（WORKLOG 824-826）：`lowerLimits=[-2.79,-2.3562,-2.79,-0.69,-2.79,-1.57,-2.79,…]`
+  - 录制实测（度）：`Joint5L -155.253 -146.629`、`Joint7L 85.853 158.719`；
+    IK 指令（度）：`Joint5L [-170.0, -94.782]`、`Joint7L [85.853, 169.997]`
+  - 远端旧 URDF：14 轴全 `-2.9670 +2.9670`；本地：`Joint1L -2.77/2.77 … Joint7L -2.77/2.77`
+  - 部署后 pinocchio 读值：`Joint1L -2.77 2.77 / Joint2L -2.3362 0.24 / Joint3L -2.77 2.77 /
+    Joint4L -0.67 2.24 / Joint5L -2.77 2.77 / Joint6L -1.55 1.55 / Joint7L -2.77 2.77`
+  - md5 三处一致（本地=远端 src=远端 install 软链）：`abf816f429b09e954f314b1737cbff07`；
+    install 原文 `-> .../src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf`
+  - 重启终检：`✅ 软件链路已启动`；`mirror L=[-1.0, 1.0, 1.0]`；
+    `cmd_rx=1312 sent=0 fb_synced=True … reject=0 max_err=0.000`；`program_run_failed` 计数 `0`
+- 结论：**左臂「卡住」的机制已定责**——URDF ±2.967 比 bridge 裁剪 ±2.77 宽，
+  IK 把 J5L/J7L 推到 ±170° 区域，bridge 截在 158.71°，于是 J7L 实测停在 158.719°（与 2.77rad
+  = 158.71° 吻合）；J5L 的 146.629° 是松手静止位，不是限位。左臂 URDF 限位已部署并与
+  bridge 同值，IK/bridge 不再各说各话。
+- 未验证：docx 限位表与今日 get_config 的轴序/固件差异（docx j5=±89.95 vs 实测 J5 ±159.9，
+  且实测 J5L 到过 −155° 已否证 docx j5 可直接套用）；右臂 URDF 仍 ±2.967 与档案表不同源；
+  新限位下真机推边界时 IK 指令是否严格 ≤2.77rad（待操作员测试）。
+- 下一步：按住离合慢速推到 J5/J7 边界，确认指令不超 2.77 且 reject=0；
+  随后继续 T29 左臂方向测试。
+- 现场变更：远端 src/install URDF 覆盖（备份 bak_1106_1723）；整链 T1–T5 重启；新增录制
+  `left_limitfix_1106_1725.npz`。未改 bridge、未改 ik_node.py、未改 ROS 参数。
+
+## 2026-11-06 17:26 | 用户要求重启服务 → 预检拦截（控制器离线）| Codex + 操作员
+
+- 动作：先停 240s 录制（pid 205497，`kill -INT`）→ `~/桌面/dm-exo/restart_teleop.sh`。
+- 证据原文：
+  - `[5/5] 停 MessageBridge ... ✅ 全部已停止，IPC 已清理`
+  - `[PRE] 检查外骨骼与机械臂网络 ... ❌ 机械臂 192.168.61.60 不可达，取消启动`
+  - `ping -c 2 -W 1 192.168.61.60` → `From 192.168.61.14 icmp_seq=1 Destination Host Unreachable`（100% loss）
+  - `ip neigh` → `192.168.61.60 dev enp1s0  INCOMPLETE`；`192.168.61.15 ... REACHABLE`
+  - `pgrep` → `NO_TELEOP_PROCS`；`ss` 仅剩 `FIN-WAIT-1 ... 192.168.61.100:54182 -> 192.168.61.60:30485`
+- 结论：**不是脚本故障**。17:24 整链还连过 30485，17:26 控制器已从网络消失（ARP 未解析），
+  停链已干净，起链被预检按设计拦住。外骨骼（.15）正常。
+- 未验证：控制器是断电、重启中，还是网线/交换机问题（需现场确认）。
+- 下一步：确认 192.168.61.60 上电并 ping 通（该机为 ARM 控制器，开机需数十秒）后，
+  再执行一次 `restart_teleop.sh`。
+- 现场变更：停 T1–T5（现全部停止）；未改文件、未改参数。
+
+## 2026-11-06 17:27 | 控制器恢复后自动重启成功 | Codex + 操作员
+
+- 动作：轮询 `ping 192.168.61.60`（3s × 40 次），一通即执行 `restart_teleop.sh`。
+- 证据原文：`控制器已恢复 17:27:11`（推断为现场断电重启完成，未验证是谁操作的）；
+  `== 全部启动完成 2026-11-06 17:27:31 ==`；`✅ 软件链路已启动`；
+  T3 `状态: connected=True cmd_rx=1256 sent=0 fb_synced=True skip=nodelta | +2s: sent=0 rx=500
+  reject=0 fb_age=0.03s max_err=0.000 held=14 jump=0 ik_moved=0`；`✅ T3 已收到 joint_commands`。
+- 结论：链路上线；控制器掉线为 17:27 之前的重启窗口（ARP INCOMPLETE → 恢复），bridge 重连成功。
+  机械臂仍未 enable（auto_enable=false），本次未按离合，故 `sent=0`。
+- 未验证：断电重启是否清掉了此前 fault；新限位下推边界的指令上限。
+- 下一步：操作员在 5566 确认 ready/enable 后做左臂测试（同 T29 动作清单）。
+- 现场变更：T1–T5 全部重启（17:27:31）；未改文件、未改参数。
+
+## 2026-11-06 17:44 | 左臂“完全不动”定性：电机7 超软限位（软件错误 0x02070001）| Codex + 操作员
+
+- 用户反馈：按住左离合，机械臂完全不动。
+- 逐级实测（`left_stuck_1106_1742.npz`，90s）：
+  - 外骨骼 800+Hz（`/exo:821Hz /ee_op:821Hz`）；离合 3 段 ON：1.55–5.95s、19.81–29.97s、86.90–89.26s。
+  - 按住期间 IK 目标大幅运动：J1L ptp 50.98°、J3L 65.71°、J5L 63.13°、J7L 17.91°。
+  - 同期真机 `/client_robot/joint_states` 左臂 **ptp 仅 0.016~0.049°**（编码器噪声），全 90s 同样量级。
+  - T3 原文（按住窗口）：`+2s: sent=100 rx=303 reject=0 fb_age=0.03s max_err=2.689 held=0 jump=0 ik_moved=1`
+    —— 指令确实在发，控制器没回 failed。
+- 松开离合后 `held=14 max_err=0.000 ik_moved=0 skip=nodelta`（正常静止态）。
+- 只读探针（停 bridge 独占 30485，17:44:40）原文：
+  `{"command":"get_device_state","erroeCode":2,"hardwareErrors":[],"motorErrorDetails":null,"softwareErrors":[34013185],"state":"idle","status":"program_run_finish"}`
+  → `0x02` = 软件错误，`34013185 = 0x02070001`，按协议编号规则（`0x02010001`=电机1超软限位）
+  即 **电机7 超软限位**。当前左臂 J7 实测 `2.7558 rad = 157.9°`，控制器 `upperLimits` J7=2.79。
+- 另：17:44:0x 控制器再次从网络消失（`ip neigh` INCOMPLETE，ping 100% loss），17:44:49 自行恢复；
+  17:26 也发生过一次。诱因未验证（可能与 movej 50Hz 连发后控制器复位有关）。
+- 结论：**信号链无断点**；断点在控制器执行层——软件错误锁存（电机7 超软限位），故 movej 秒回
+  `program_run_finish` 但不执行，55Hz 空转。用户最初判断的「第7关节 158° 限位」成立。
+- 现场变更：T3 bridge 已停（为让 5566 释放 30485）；T1/T2/T4/T5 仍在跑。
+- 下一步：①操作员在 5566 清故障 + 人工使能；②把左 J7 手动退回安全区（<150°）；③再决定是否把
+  J7 的 URDF/bridge 限位从 2.77 收到 2.70（防止再次锁存）。
+
+## 2026-11-06 18:20 | 限位全项目同步（右臂 URDF 补齐）+ 一键重启 | ZCode
+
+- 背景：用户在 5566 限位设置页设置/确认真机限位（截图 18:03），要求项目侧重新对齐并重启整链。
+- 只读探针（probe_device_state.py，停 bridge 窗口 18:10，30485 空闲）原文：
+  - `get_config` → `lowerLimits=[-2.79,-2.3562,-2.79,-0.69,-2.79,-1.57,-2.79,-2.79,-2.3562,-2.79,-0.69,-2.79,-1.57,-2.79]`，
+    `upperLimits=[2.79,0.26,2.79,2.26,2.79,1.57,2.79,2.79,0.26,2.79,2.26,2.79,1.57,2.79]` —— 与用户 UI 数值一致，
+    双臂完全对称；证实 17:24 部署表 = 该原始值每项内缩 0.02rad（2.79→2.77 等），bridge 表无需改动。
+  - `get_joint_position` → 17 维全 ≈0（J7 已从 157.9° 人工归零，离新限位边界远）。
+  - `get_device_state` → `state=idle, hardwareErrors=[], softwareErrors=[34013185]`
+    —— 17:44 的电机7 超软限位（0x02070001）软件错误仍锁存，遥操前需 5566 清故障+人工 enable。
+- 改动：仅 URDF 右臂 Joint1~7 限位 ±2.967 → 与左臂同表（±2.77, J2[-2.3362,0.24], J4[-0.67,2.24], J6±1.55），
+  头部注释同步更新（2c）。至此全项目四表一致：URDF(双臂) == bridge LIVE_LIMITS_RAD == get_config−0.02rad。
+  bridge 文件未动（两臂本就走 LIVE 表）；ik_node 未动（限位继承 URDF）。
+- 现场变更：URDF 推远端 src（备份 `.bak_1106_1818`；远端 md5=`ca6ab8c0bf41bb05389d1ca62d072300` 与本地一致；
+  install 软链确认指向 src）；18:18:56 `restart_teleop.sh` 整链重启（T1–T5 全新进程）。
+- 重启后证据原文：
+  - `已连接控制器 192.168.61.60:30485（协议 V0.3，帧尾 #，收发双线程）`；
+    `已用 get_joint_position 同步内部关节缓存，开始允许下发 | R0=0.000 L0=0.000`
+  - 30485 唯一 ESTAB：`192.168.61.100:60314 ↔ 192.168.61.60:30485`（T3 所有）
+  - 状态行 `connected=True cmd_rx=1736 sent=0 fb_synced=True … reject=0 … max_err=0.000 held=14 jump=0 ik_moved=0`
+    （无离合基线 ✅）
+  - `ros2 topic hz /target_robot/joint_commands` → `average rate: 243.988`（≈250Hz ✅）
+  - 新日志 `program_run_failed` 计数 = 0
+- 未验证：真机运动学行为（控制器 idle 且带软件错误锁存，未 enable，未按离合）。
+- 下一步：①操作员 5566 清故障（softwareErrors 34013185）+ 人工 enable；②按住离合慢动做 T06 验收
+  （J5/J7 推向 ±157° 附近，确认 IK 指令不越过 ±2.77、reject=0）；③T30 翻转表探针接续。
+
+## 2026-11-06 19:00 | 方向诊断与校准系统落地（T29 映射模块实现+部署） | ZCode
+
+- 交付物（全部本地+远端）：
+  - `ros2_ws/src/robot_ik_retargeting/robot_ik_retargeting/master_slave_map.py`（新增）：
+    ArmPoseMap 纯逻辑映射（3×3 position_map + 姿态正交换基含 det 符号规则 + 缩放 +
+    validate 门禁 + arm_pose_map_v1 JSON 存取 + Procrustes 拟合）。默认参数==旧行为。
+  - `ik_node.py`：`_incremental_desired` 改走 pose_map（377 行原 mirror 公式退役）；
+    新参数 calib_file_{side}/position_map_{side}/orientation_map_{side}/*_scale_{side}；
+    启动打印 pose_map 表；标定加载失败拒绝启动。
+  - `tools/tests/test_master_slave_map.py`：15 项离线回归 OK（恒等等价旧公式逐位断言）。
+  - `tools/dm-exo/sixdir_calib.py`：segment/fit(measured|desired)/verify/selftest，
+    selftest 合成链路回收真映射+验收 PASS。用法见 `docs/方向诊断与校准系统.md`（新增）。
+- 部署证据：远端备份 `ik_node.py.bak_1106_185x`；远端 md5 ik_node=`1ea272d1…`、
+  master_slave_map=`caf170c6…` 与本地一致；egg-link 生效（venv+install source 后 import OK）。
+- 运行态证据（重启后原文）：
+  `pose_map[left] pos_scale=1.0 orn_scale=1.0 P_map=[[-1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]] O_map=I`
+  （== 旧行为 diag(mirror_left=[-1,1,1])，部署零行为变化）；
+  `publish_commanded_ee_state=False` 已设；`/target_robot/joint_commands` 持续 ~240Hz；
+  bridge `connected=True cmd_rx=496170 reject=0 max_err=0.000 held=14`。
+- 现场变更：T5 两次重启（第一次裸 launch 丢了 mirror 参数，自查发现——
+  `mirror L=[1.0,1.0,1.0]` 与 publish=True，已按 start_teleop.sh 同款参数重启修正）；
+  第二次重启后核对 pose_map 日志确认恢复。**教训复现：杀进程与含同字面串的启动行
+  同一条 ssh 会自杀会话（exit 255，记忆雷②再踩），已拆分调用。**
+- 未验证：真机端到端（控制器仍 idle+softwareErrors 34013185 未清，期间新出现 9 条
+  program_run_failed，签名=未使能下按离合，与本次改动无关——改动仅 IK 映射层）。
+- 下一步：①操作员 5566 清故障+enable；②六方向标定录制（sixdir_calib 流程）；③T30 翻转表探针。
+
+## 2026-11-06 19:23 | URDF 更换路线离线判决（关闭）+ 操作员新体感录入 + 离线审计数据就位 | ZCode
+
+- 用户体感（口述，未量化）：左臂遥操方向"十分奇怪"，右臂"好很多"。问能否换
+  download/hr_up_7dof_fixed 的 URDF 解决；如不能则走 A（离线审计）→T30→sixdir 原方案。
+- URDF 判决（全程离线，零真机）：候选
+  `DM-EXton2ProductPackage_tianchuang/.../download/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf`
+  md5=`5ad884caee98ea1d102df56c38609bef` vs 当前生效 md5=`ca6ab8c0bf41bb05389d1ca62d072300`：
+  15 关节 type/origin/axis **0 处差异**（运动学完全相同）；限位 **14 处倒退**
+  （候选全轴 ±2.967，当前为 get_config−0.02 非对称表）。README_v2 原文：
+  "已修复 Link1L～Link6L 的质心及惯性坐标系……关节运动学和限位未修改"。
+  **结论：换它不解决方向问题，且重开 T06/T23 软限位 fault 风险 → 路线关闭。**
+- 右臂从未采样实锤：远端 `~/tcvg/urdf_fk_calib/calib_R_drive.jsonl` 0 字节；
+  左臂 6 样本在 `calib_samples_L_1106_0943.jsonl`。"右臂好"目前=体感，无定量证据。
+- 现场变更：无（远端只读）。本地拉取 ~/下载/dm-exton2-teleop/offline_bags_1106/：
+  顶层 9 个 npz + bags/ 47 个 npz + urdf_fk_calib/ 全目录（样本+对账脚本）。
+  字段核验：ee_{side}_state(7 维末端)、clutch_{side}、rob_v(14 关节反馈 ~54Hz)、
+  ik_v(14 ~250Hz)、exo_v(12 ~836Hz) —— 离线方向审计数据结构无缺口。
+- 未验证：左臂逐关节方向表（离线回归进行中）；真机任何行为（未动）。
+- 下一步：①离线审计出左臂预测翻转表（与 T30 探针交叉对账）；②真机窗口前置：
+  5566 清 softwareErrors 34013185 + 人工 enable + T01 再核对；③sixdir 左臂标定
+  + 右臂基线段（把"右臂好多少"变成数字）。
+
+## 2026-11-06 19:39 | 离线方向审计完成（左臂数值层无罪+滞后量化；右臂无健康基准实锤） | ZCode
+
+- 交付物：`tools/dm-exo/offline_direction_audit.py`（离合窗增量相关+净量投票+末端敏感表，
+  修正版语义：ik↔rob 数值层恒应≈+1，物理轴翻转在此层不可见——翻转表只有 T30 探针可见）；
+  原始输出留档 `offline_bags_1106/audit_left.txt` / `audit_right.txt`。
+- 左臂证据（9 包 4435 样本/12 段，dir01/press01-04_left/2318xx/clutch_test2/left_direction 等）：
+  - 指令号跟踪全正：J1 +0.71/12帧、J3 +0.72/20帧、J4 +0.73/12帧、J5 +0.70/17帧、
+    J6 +0.90/12帧、J2 +0.36(弱)、J7 +0.57(弱)；**无一处负相关** → 固件无数值反演，
+    「数值层」嫌疑排除。
+  - 净量投票 12 段全对角一致（J1 +8、J4 +10、J6 +12…无任何负票）；
+    增益 median J1=0.62 最低、其余 0.68~0.99 → 健康窗全轴执行，无「指令了但不动」关节。
+  - 滞后 240~400ms（era 混池：11-05 movej 晚 + 11-06 canfd 早，未按 era 拆分——未验证分层值），
+    T15 基线测量时注意。
+  - 末端敏感表 ik 与 rob 结构一致（J1=X−，J2~J7 主导 Y，符号逐关节相同，rob≈0.5~0.7×ik）。
+- 右臂证据：56 包中仅 verify_fix.npz（11-05 19:52）有运动，但增益全轴 0.03~0.29、
+  全部 WEAK/DEAD（不跟手时代的贫执行抓拍）；press01-03_right_2158/2212 全部「按住离合
+  真机零运动」。**结论：现存录包不含右臂任何健康基准，右臂量化只能真机窗口补。**
+- 推论（对「左臂为何方向怪」的收敛）：数值层（指令透传/固件解释）无罪；病收敛在
+  ①物理轴翻转/置换（仅 T30 get_tcp_pose 微扰可观测）②末端帧映射（sixdir）③URDF↔控制器
+  结构差（T20）三层——与 docs/方向诊断与校准系统.md 分层表一致，无需新增假设。
+- 现场变更：无（本地离线分析，远端只读已在上条记录）。
+- 未验证：滞后按 era 拆分值；J2/J7 弱相关是激励不足还是间歇跟踪（T15 可顺带）。
+- 下一步（真机窗口 ~25min）：① 5566 清 softwareErrors 34013185 + 人工 enable；
+  ② T30 左臂探针（3min，翻转表唯一数据源）；③ sixdir 左臂标定 + 右臂基线段；
+  ④ verify <3mm 验收。
+
+## 2026-11-07 02:33 | 调试手册落库 | AI
+
+- 动作：新建 `docs/机器人现场调试手册.md`（快速实验驱动模式：假设驱动 / 单变量最小修改 / 真机验证 / 保留回退；七条规则原文 + 实验五问模板 §4.1 + 真机安全红线速查附录 A/B）；README.md §五「看什么」插入第 4 条指引（原「代码入口」顺延为第 5 条）
+- 证据：`wc -l docs/机器人现场调试手册.md` → `118`
+- 结论：手册已落库；实验记录沿用 WORKLOG 既有模板，附加实验五问（假设/修改/预期/判据/回退），失败即回退、成功经回归后提交
+- 未验证：无（纯文档变更）
+- 下一步：无独立任务；后续真机实验按手册 §4.1 以 ExNN 编号在对应 Txx 任务下落账
+- 现场变更：无（未触远端、未动任何进程）
+
+## 2026-11-07 02:34 | 调试手册入接手必读路径 | AI
+
+- 动作：AGENTS.md §0 接手流程第 1 步追加读 `docs/机器人现场调试手册.md`（快速实验驱动模式，实验记录模板见其 §4.1）
+- 证据：AGENTS.md §0 第 1 条现文末尾为「→ 读 [docs/机器人现场调试手册.md](./docs/机器人现场调试手册.md)（调试工作方式：快速实验驱动模式…）」
+- 结论：手册进入接手必读路径，与 HANDOFF/TASKS 同级
+- 未验证：无（纯文档变更）
+- 下一步：无
+- 现场变更：无
+
+## 2026-11-07 02:52 | 工作方式基建化（模板库+用户级规则+技能） | AI
+
+- 动作：把本项目验证过的「AI 接手+台账落账+快速实验驱动」抽成三层跨项目基建：
+  ① 模板库 `~/zcode-templates/robot-debug-kit/`（AGENTS/HANDOFF/TASKS/WORKLOG/README/
+  调试手册通用版/new_project.sh/USAGE.md，git 管理）；
+  ② 用户级 `~/.zcode/AGENTS.md`（快速实验驱动+落账硬规则+新项目引导，所有工作区自动加载）；
+  ③ 用户级技能 `~/.zcode/skills/new-robot-project/SKILL.md`（/new-robot-project 访谈式初始化）
+- 证据：
+  - 模板库 git 提交：`2350d0b robot-debug-kit: 机器人调试项目台账模板（接手须知/交接/任务台账/流水/调试手册）`
+  - 冒烟测试：`./new_project.sh /tmp/kit_smoke "测试项目" "测试机械臂"` → 骨架生成；
+    `grep -rl '{{' /tmp/kit_smoke` 无残留（exit=1）；
+    `/tmp/kit_smoke/HANDOFF.md` 首行 `# 测试项目 —— 交接文档`、建档行 `设备：测试机械臂`、日期 2026-11-07
+  - 测试目录已清理（rm -rf /tmp/kit_smoke）
+- 结论：基建可用；规则源头收敛到模板库，改进改模板库并提交，再同步到已有项目副本
+- 未验证：`~/.zcode/AGENTS.md` 与技能在**下一个新会话**的实际加载效果（需新开会话确认技能可被 /new-robot-project 调出）
+- 下一步：无
+- 现场变更：无（未触远端、未动任何现场进程）
+
+## 2026-11-07 03:1x | 通用调试规则入用户级规则与模板库（复盘提炼九条） | AI
+
+- 动作：把两天踩坑提炼的通用判据/部署纪律落到三处：
+  ① 用户级 `~/.zcode/AGENTS.md` 新增「判据与部署纪律」节（九条，所有工作区自动加载）；
+  ② 模板库 `~/zcode-templates/robot-debug-kit/`：AGENTS.md §4 禁忌升级第 1 条并新增 6–10 条，
+  调试手册 §4 加判据纪律、§5 加部署卫生、附录 A 新增 6–8 条（新项目自动带入）；
+  ③ 本项目 AGENTS.md §4 新增第 7–9 条（带日期与事故出处）。
+  九条内容：消极证据≠证据 / 判据先校准再用 / 杀进程按 PID（字面串自匹配变体）/
+  进程活着≠系统可用 / 部署前 diff 隔离 WIP / 闭环驱动以实测反馈为底 / 启动重连大偏差禁全速追 /
+  静态资料先与实机核对再用 / 真机窗口离线备弹。
+- 证据：模板库 git 提交 `dbedf06 通用判据/部署纪律入册…九条（源自 2026-11 DM-EXton2 两天实测教训）`；
+  本地 AGENTS.md §4 现含 9 条禁忌（原 6 条 + 本次 7/8/9）
+- 结论：规则源头收敛到用户级配置与模板库；新项目经 new_project.sh / /new-robot-project 自动带入
+- 未验证：新规则在下一个新会话/新项目中的实际加载效果（随基建项一并验证）
+- 下一步：无
+- 现场变更：无（未触远端、未动任何现场进程）

@@ -172,11 +172,21 @@ else
 fi
 
 # T11 已证明 commanded state 与 FK state 双发布会形成错误反馈路径；每次重启后明确关闭，
-# 避免参数恢复默认值。失败即判启动失败，不把不确定状态交给操作员。
-if ! timeout 8 bash -c "source '$HUMBLE'; export ROS_DOMAIN_ID=42 ROS_LOCALHOST_ONLY=0; \
-        ros2 param set /ik_retargeting publish_commanded_ee_state false" \
-        | grep -q "Set parameter successful"; then
+# 避免参数恢复默认值。T5 launch 注册节点有竞态，等待并重试，不能把 Node not found 当成
+# 启动失败。
+PARAM_OK=0
+for _ in $(seq 1 20); do
+    PARAM_OUT=$(bash -c "source '$HUMBLE'; export ROS_DOMAIN_ID=42 ROS_LOCALHOST_ONLY=0; \
+        ros2 param set /ik_retargeting publish_commanded_ee_state false" 2>&1 || true)
+    if printf '%s\n' "$PARAM_OUT" | grep -q "Set parameter successful"; then
+        PARAM_OK=1
+        break
+    fi
+    sleep 0.5
+done
+if [ "$PARAM_OK" -ne 1 ]; then
     fail "T5 无法关闭 publish_commanded_ee_state，取消启动"
+    printf '%s\n' "$PARAM_OUT"
     exit 1
 fi
 ok "T5 左臂 X 镜像与 commanded-state 关闭参数已固化"

@@ -71,6 +71,15 @@ T5 ik_node（pink IK, 250Hz）: 增量遥操核心，离合锚定逻辑都在这
 `program_run_failed`，这是控制器/电机执行层拒绝，不能误判为 bridge 没启动；先由操作员在
 5566 检查 fault/enable、关闭图形界面，再重启软件链。`auto_enable=false` 不得绕过。
 
+**当前方向/灵敏度交接（2026-11-06，任务 T29）**：现有 T5 使用外骨骼末端相对位姿增量，
+不是外骨骼关节到真机关节的直接映射。平移当前 1:1，左臂只临时翻转 X
+（`[-1,+1,+1]`），右臂不翻转；姿态相对旋转 1:1 且未做坐标系变换。`mirror_xyz` 只能
+翻同名轴符号，无法校准轴交换/旋转。与此同时 T20 已确认 URDF 与控制器真实运动学结构性
+不一致，所以“方向混乱”包含输入坐标映射与 IK→真机模型两层问题。下一 AI 先读 TASKS T29：
+平移低倍率/关闭姿态做六方向采集，拟合每臂完整 3×3 映射；建议初始
+`position_scale=0.30`、`orientation_scale=0.20`、bridge `max_joint_step_rad=0.02`，保持
+canfd 50Hz。上述均为建议，尚未部署，真机修改需 donghai 确认。
+
 ## 二、今日已修复（全部在 ik_node.py，src↔build 硬链接，改完重启 T5 即生效）
 
 路径：`.../exton_ros2_retargeting_demo/src/robot_ik_retargeting/robot_ik_retargeting/ik_node.py`
