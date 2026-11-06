@@ -78,19 +78,22 @@ fi
 sleep 1
 
 # ---------- T3 exton_bridge（连真机控制器） ----------
+# 2026-11-06 定版：canfd 流式遥操（movej 走停模式已实测不可用：指令跑飞+保护性故障）；
+# use_archive_right_limits=false（档案限位表过时，j5 与真机差 1.22rad，会裁合法位姿）
 LOG=$LOGDIR/T3_bridge.log; : > "$LOG"
-echo "[T3] exton_bridge 启动中（$IP_ROBOT:30485, movej, v=15, auto_enable:=false）..."
+echo "[T3] exton_bridge 启动中（$IP_ROBOT:30485, movej_canfd, auto_enable:=false, 动态限位关闭档案表）..."
 setsid nohup bash -c "
     source $HUMBLE
     python3 $HOME/tcvg/exton_bridge.py --ros-args \
-      -p control_mode:=movej -p move_speed:=15.0 -p auto_enable:=false
+      -p control_mode:=movej_canfd -p move_speed:=15.0 -p auto_enable:=false \
+      -p use_archive_right_limits:=false
 " >> "$LOG" 2>&1 &
 echo $! > "$LOGDIR/T3.pid"
 if wait_log "$LOG" "已连接控制器" 20; then
-    ok "T3 已连接控制器 $IP_ROBOT:30485（sent=0，未下发任何指令）"
+    ok "T3 已连接控制器 $IP_ROBOT:30485（canfd 流式，sent=0，未下发任何指令）"
 else
     # 机械臂未开机时不阻断整体启动
-    echo "  ⚠️  T3 暂未连上控制器（机械臂未开？），后台继续重试，其余步骤照常"
+    echo "  ⚠️  T3 暂未连上控制器（机械臂未开/JuxieLinker 未起？），后台继续重试，其余步骤照常"
 fi
 sleep 1
 

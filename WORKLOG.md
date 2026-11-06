@@ -629,3 +629,25 @@ average rate: 250.762
   遥操复测方向+T15 基线。
 - 现场变更：bridge 重启为 canfd 模式（use_archive_right_limits=false）；
   控制器经 clear+enable 恢复（第三次故障）。
+
+## 2026-11-06 11:2x–11:3x | 一键脚本固化今日优化 + 全栈重启验证 | ZCode + 操作员
+
+- 动作与证据：
+  1. **微扰实测受阻**：urdf_axis_probe.py 两次 ConnectionRefused——第三次臂断电重启后
+     JuxieLinker 服务（5566/30485）未随上电自动启动（.60 主机 ping 通、22 开，
+     5566/30485 关）。等操作员手动启动 JuxieLinker。
+  2. **一键脚本固化今日优化**（tools/dm-exo/start_teleop.sh + start_bridge_only.sh）：
+     T3 参数改为 `control_mode:=movej_canfd`（movej 走停模式今日实测不可用：跑飞+
+     保护性故障）+ `use_archive_right_limits:=false`（档案限位过时，j5 差 1.22rad 会裁
+     合法位姿）。远端备份 `start_teleop.sh.bak_1106_1129` / `start_bridge_only.sh.bak_1106_1129`
+     后推送，bash -n 语法过。
+  3. **全栈重启验证（新脚本首次实战）**：stop_teleop 清场 ✅ → start_teleop 全链：
+     T1 ✅ / T2 ✅（fk+RViz）/ T4 ✅ / T5 ✅ / T3 ⚠️ 未连上（30485 未起，后台 1s 重试——
+     脚本非阻断设计生效）。重启后 `publish_commanded_ee_state=False` 已恢复（T11 条件）。
+     IK_STAT 未出现为预期（反馈链未通，bridge 连上即现）。
+- 结论：canfd + 关档案限位已是脚本级基线，重启不再回退；JuxieLinker 启动后 bridge
+  自动接入即可遥操。
+- 未验证：微扰翻转表（等 JuxieLinker）；T23 两个挂起测试。
+- 下一步：操作员启动 JuxieLinker → bridge 自动连 → 跑微扰翻转表 → 改 URDF →
+  T2/T5 重启 → 遥操方向复测。
+- 现场变更：全栈重启（新脚本）；远端 start 脚本更新（原版已备份）；T3 后台重试中。
