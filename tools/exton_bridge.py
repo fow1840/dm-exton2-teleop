@@ -651,6 +651,9 @@ class ExtonBridge(Node):
         self._rx_seen_t = time.monotonic()
         # IK 目标活动检测：与上一帧 IK 值逐轴比较
         self._last_ik_pos: dict = {}
+        # 观测性：看门狗窗口化增量基线 + 最后一拍计划上下文（B 项状态行增强）
+        self._wd_prev: dict = {}
+        self._last_plan_info = (0, 0, 0.0, False)  # held, skipped, max_err_abs, ik_moved
 
         # 17 维模板：非控制轴 -100；右臂用档案 home 作初值（弧度）
         self._joint_cmd = [HOLD] * N_JOINTS
@@ -819,6 +822,7 @@ class ExtonBridge(Node):
         skipped = plan.skipped
         max_step_abs = plan.max_step_abs
         max_err_abs = plan.max_err_abs
+        self._last_plan_info = (plan.held, plan.skipped, plan.max_err_abs, ik_moved)
 
         # 腰/头始终保持
         joints[IDX_WAIST] = HOLD
@@ -960,11 +964,25 @@ class ExtonBridge(Node):
             lock_suffix = (
                 f' movej_tx={movej_sent} ack={movej_ack} timeout={movej_timeout}'
             )
+
+        def _delta(key, val):
+            """窗口增量：累计值看不见速率，跨日志对齐要的是每窗变化量。"""
+            prev = self._wd_prev.get(key, val)
+            self._wd_prev[key] = val
+            return val - prev
+
+        fb_age = self.tcp.get_feedback_age()
+        held, skipped, max_err, ik_moved = self._last_plan_info
         self.get_logger().info(
             f'状态: connected={self.tcp.connected} '
             f'cmd_rx={self._cmd_rx_count} sent={self._send_count} '
             f'fb_synced={self._fb_synced} skip={self._last_skip_reason}'
-            f'{lock_suffix}'
+            f'{lock_suffix} | +2s: sent={_delta("sent", self._send_count)} '
+            f'rx={_delta("rx", self._cmd_rx_count)} '
+            f'reject={_delta("fail", self._fail_count)} '
+            f'fb_age={(fb_age if fb_age is not None else -1):.2f}s '
+            f'max_err={max_err:.3f} held={held} jump={skipped} '
+            f'ik_moved={int(ik_moved)}'
         )
         if self._cmd_rx_count == 0:
             self.get_logger().warn(

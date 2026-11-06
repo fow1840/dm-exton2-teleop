@@ -361,6 +361,23 @@
 - 负责：AI 工具 + 操作员摆位姿
 - 关联：T06（限位，get_config 直接解决大半）、T10（近奇异构型真实性）、T13、T16/T19（部署）
 
+### T21 链路监视节点 chain_monitor（只读外挂观测，P1）
+
+- 优先级：P1（S2/S3 vendor 黑盒不可加日志的外挂替代，UBT `pink_signal_chain_monitor`
+  同款思路；评估见 docs/日志观测性评估.md）
+- 状态：`TODO`（A/B 两项——ik_node 状态行+事件、bridge 窗口化状态行——已随
+  T16/T19 包实现，见 WORKLOG 2026-11-06 03:3x 条目）
+- 需求：vendor 组件（MessageBridge/Puppetry）无法内部加日志，本周 T11/T12 归因
+  全靠录包离线分析；需要一个独立只读进程在线回答跨模块问题。
+- 规格：新节点 `tools/dm-exo/chain_monitor.py`（仅订阅，零发布，不碰任何控制路径）：
+  - 订阅 (C) target×2 / (E) state×2 / (F) commands / (D) client_joint_states / (B) clutch×2；
+  - 2s 打印：**目标流速度**（手静窗滑移 mm/s=T11 在线判据）、(E) 发布者数与
+    指令FK-vs-实测FK 残差（双发布=机制②报警）、(F)→(D) 关节级指令-反馈滞后
+    （跟随延迟在线版=T15 连续观测）、clutch 事件时间线（跨日志对齐基准）。
+- 验收：手静按住时监视器直接打出目标滑移速度并与录包离线值一致（±20%）；
+  全链路静置时无告警误报。
+- 风险：零（纯只读）；随 T16 部署窗口一起上（挂进 start_teleop.sh 或单独跑）。
+
 ## 三、别接的活（明确出界）
 
 - 改 `move_speed` / `auto_enable`（安全设定，需人工在示教器确认）

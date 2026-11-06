@@ -427,3 +427,25 @@ average rate: 250.762
   锚点与首查命令；行号以函数名为准（远端部署前行号会漂）。
 - 未验证：无（纯文档化，全部锚点经当日 grep 核对）。
 - 现场变更：无（本地新增 docs/信号链路模块定位图.md 并入库）。
+
+## 2026-11-06 03:3x | 日志观测性评估 + A/B 项实现 | ZCode
+
+- 动作：逐节点盘点日志现状（grep 计数），产出 docs/日志观测性评估.md；实现 A（ik_node
+  运行期状态行+四类事件）与 B（bridge 状态行窗口化）；TASKS 立 T21（chain_monitor）。
+- 证据原文：
+  - 盘点：`grep -c get_logger ik_node.py` = **3（全部在启动期，运行期日志为零）**；
+    bridge = 20（较全但计数器为自启动累计值）。
+  - 实现：ik_node 新增 2s `IK_STAT clutch=… still=… frozen=L/R await=L/R solve=N/ticks
+    win=…` 状态行（与 T3 状态行同节拍可对齐）+ 事件日志 `clutch ON/OFF` /
+    `anchor settled after X.XXs（超时兜底标注）` / `freeze ENGAGE/RELEASE`（边沿触发不刷屏）；
+    bridge 状态行追加 `| +2s: sent=N rx=N reject=N fb_age=X.XXs max_err=X.XXX held=N
+    jump=N ik_moved=N`（保留原累计字段，历史证据链兼容）。
+  - 回归：py_compile 双文件 OK；test_bridge_offline.py **19/19 OK**（纯日志添加，
+    控制语义未动）。
+- 结论：评估成立——① T5 运行期零日志是最大观测黑洞（T12「冻结了还在发吗」当时靠
+  录包数小时，今后两条状态行对照即知）；② vendor 黑盒用只读外挂监视器补（T21）；
+  ③ 日志回答「有没有/多频繁」，录包回答「逐帧因果」，分层不互替。
+- 未验证：新日志在真机上的实际输出格式与刷屏程度（250Hz 循环只累计计数器，
+  2s 一条，理论无压力）；chain_monitor 未写（T21）。
+- 下一步：随 T16/T19 部署窗口上真机看状态行实貌；T21 择机实现。
+- 现场变更：无（本地 ik_node.py/exton_bridge.py 领先远端，推前必须备份）。

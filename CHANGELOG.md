@@ -88,6 +88,10 @@
 - `docs/信号链路模块定位图.md`：S1~S7 全环节「文件:行号:职责」锚点表 + 话题字典 +
   日志状态行判读（skip 字段速查）+ 按症状反查表——AI/人定位问题的检索入口。
 
+- `docs/日志观测性评估.md` + A/B 项实现：ik_node 运行期状态行（IK_STAT，2s）与
+  事件日志（clutch/anchor/freeze 边沿）、bridge 状态行窗口化（+2s 增量/fb_age/
+  max_err/held）；TASKS 立 T21（chain_monitor 只读外挂）。回归 19/19 OK。
+
 ## 当前状态与下一步
 
 - 本地 vs 远端：`tools/exton_bridge.py` **领先远端**（远端仍是 fe58738a 版）；

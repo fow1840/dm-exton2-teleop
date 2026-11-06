@@ -263,6 +263,16 @@ class UniversalHumanIK(Node):
         self.prev_exo_target = {'left': None, 'right': None}
         self.prev_exo_time = {'left': None, 'right': None}
 
+        # ---- 观测性（纯日志，不碰控制语义）----
+        # 运行期日志此前为零：T11/T12 的归因全靠录包离线分析。2s 状态行与 T3 bridge
+        # 状态行同节拍，两条日志对照即可在线回答「冻结了 bridge 还在不在发」。
+        self._stat_last = None            # 状态行窗口起点
+        self._stat_ticks = 0              # 窗口内 control_loop 拍数
+        self._stat_solve = 0              # 窗口内实际 solve_ik 拍数（双臂掉频判据）
+        self._stat_frozen = {'left': 0, 'right': 0}   # 冻结拍数
+        self._stat_await = {'left': 0, 'right': 0}    # 安定等待拍数
+        self._prev_frozen = {'left': None, 'right': None}  # 冻结沿检测
+
         self.get_logger().info(
             f'IK INCREMENTAL teleop (pos+orn) | pos_cost={pos_cost} orn_cost={orn_cost} '
             f'mirror L={self.mirror_xyz["left"].tolist()} R={self.mirror_xyz["right"].tolist()} '
@@ -385,6 +395,7 @@ class UniversalHumanIK(Node):
         now_s = self.get_clock().now().nanoseconds * 1e-9
         for side in ['left', 'right']:
             if self.clutch[side] and not self.prev_clutch[side]:
+                self.get_logger().info(f'clutch {side} ON → 按臂重置+锚定等待')
                 # 只重置本臂（UBT P-016 M2 审查同款问题的修复）：另一臂可能正在跟
                 # （IK 持续积分、指令领先实测数度），全量重置会让它的指令瞬间跳回
                 # 实测位 → bridge 限幅追认 → 右臂可见地顿/跳一下（双臂交叠按下时）。
@@ -405,6 +416,8 @@ class UniversalHumanIK(Node):
                 self.await_anchor[side] = True
                 self.await_t0[side] = None
                 self.await_hist[side].clear()
+            elif not self.clutch[side] and self.prev_clutch[side]:
+                self.get_logger().info(f'clutch {side} OFF')
 
         clutch_any = any(self.clutch.values())
         q_ik = self.q_commanded if clutch_any else self.q_measured
@@ -426,6 +439,7 @@ class UniversalHumanIK(Node):
                 T_exo = self.latest_target_in_ref[side]
 
                 if self.await_anchor[side]:
+                    self._stat_await[side] += 1
                     if T_exo is None:
                         # 目标流尚未恢复：本拍冻结（不求解，速度贡献为0）
                         self.broadcast_tf(T_current_in_ref, f"ik_target_{side}", self.ref_link)
@@ -455,6 +469,9 @@ class UniversalHumanIK(Node):
                         # 安定（或超时）：外骨骼锚=当前目标（位置+姿态与后续同源），
                         # 机器人锚=当前真机位姿
                         self.await_anchor[side] = False
+                        self.get_logger().info(
+                            f'anchor {side} settled after {since_start:.2f}s'
+                            f'{"（超时兜底）" if not settled else ""}')
                         self.await_t0[side] = None
                         h.clear()
                         self.robot_anchor_in_ref[side] = T_current_in_ref.copy()
@@ -499,9 +516,17 @@ class UniversalHumanIK(Node):
                     # 手静：不求解，冻结该臂，并清掉速度滤波残留（否则松手后
                     # 还会继续积分出几拍尾巴动作）。目标一旦重新变化即恢复求解，
                     # 所以跟随速度与精度不受影响。
+                    if self._prev_frozen[side] is not True:
+                        self.get_logger().info('freeze %s ENGAGE' % side)
+                        self._prev_frozen[side] = True
+                    self._stat_frozen[side] += 1
                     for idx in self._side_joint_indices(side):
                         self.last_velocity[idx] = 0.0
                 else:
+                    if self._prev_frozen[side] is True:
+                        self.get_logger().info('freeze %s RELEASE' % side)
+                        self._prev_frozen[side] = False
+                    self._stat_solve += 1
                     v_side = solve_ik(
                         self.configs[side],
                         self.tasks[side].values(),
@@ -514,6 +539,7 @@ class UniversalHumanIK(Node):
             else:
                 T_display_in_ref = T_current_in_ref
                 self.last_desired_in_ref[side] = None
+                self._prev_frozen[side] = False
 
             self.broadcast_tf(T_display_in_ref, f"ik_target_{side}", self.ref_link)
             self.prev_clutch[side] = self.clutch[side]
@@ -543,6 +569,26 @@ class UniversalHumanIK(Node):
         # 做单变量对照（/target_robot/{side}_ee/state 双发布会污染 Puppetry 锚定）
         if bool(self.get_parameter('publish_commanded_ee_state').value) and clutch_any:
             self._publish_ee_states(self.q_commanded)
+
+        # 观测性：2s 状态行，与 T3 bridge 状态行同节拍（跨日志对齐只看秒差）。
+        # solve/ticks 直接暴露双臂掉频（T18）；frozen 与 T3 的 +2s sent 增量对照
+        # 即可在线判定 hunt（T12）。
+        if self._stat_last is None:
+            self._stat_last = now_s
+        elif now_s - self._stat_last >= 2.0:
+            win = now_s - self._stat_last
+            self.get_logger().info(
+                f'IK_STAT clutch=L:{int(self.clutch["left"])},R:{int(self.clutch["right"])} '
+                f'still=L:{int(self.exo_still["left"])},R:{int(self.exo_still["right"])} '
+                f'frozen={self._stat_frozen["left"]}/{self._stat_frozen["right"]} '
+                f'await={self._stat_await["left"]}/{self._stat_await["right"]} '
+                f'solve={self._stat_solve}/{self._stat_ticks} win={win:.2f}s')
+            self._stat_last = now_s
+            self._stat_ticks = 0
+            self._stat_solve = 0
+            self._stat_frozen = {'left': 0, 'right': 0}
+            self._stat_await = {'left': 0, 'right': 0}
+        self._stat_ticks += 1
 
     def _publish_ee_states(self, q):
         for side in ['left', 'right']:
