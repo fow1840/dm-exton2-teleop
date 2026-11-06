@@ -1335,3 +1335,12 @@ average rate: 250.762
 - 未验证：新规则在下一个新会话/新项目中的实际加载效果（随基建项一并验证）
 - 下一步：无
 - 现场变更：无（未触远端、未动任何现场进程）
+
+## 2026-11-07 03:4x | 仓库首次推送 GitHub（fow1840/dm-exo-teleop，public） | AI
+
+- 动作：① 把当时未提交改动一并入库（提交 `0a09de3 T29 方向校准系统落地…+ 限位全项目同步 + 台账与调试手册入册`，含 offline_bags_1106 审计/urdf_fk_calib 文本产物，npz/zip/apk/pink 仍按 .gitignore 排除）；② 添加 remote `origin git@github.com:fow1840/dm-exo-teleop.git` 并**强推覆盖**远端原有 Initial commit；③ 仓库保持 public（用户明确确认按现状推，已告知含厂商手册 PDF×2、Install 二进制、内网 IP 与 sshpass 模式）。
+- 证据：推前远端 HEAD `b3ec3cd Initial commit`（仅 README.md 1 行，与本地历史无关）；push 输出 `+ b3ec3cd...0a09de3 main -> main (forced update)`；推后 `git ls-remote origin main` = `0a09de3956000f70aa909ff6a611517c9228148f` = 本地 HEAD；SSH 认证 `Hi fow1840!`
+- 结论：远端 GitHub 与本地 main 已同步（27 个提交，215+ 文件，41MB pack，最大单文件 12.7MB 未触 100MB 红线）；后续改动 `git push` 即可，勿再强推
+- 未验证：public 可见性下外部访问效果（未开浏览器核对页面渲染）
+- 下一步：无
+- 现场变更：无（未触 tc 主机、未动任何现场进程；仅新增本地 git remote 配置）
