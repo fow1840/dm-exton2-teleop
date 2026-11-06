@@ -92,6 +92,10 @@
   事件日志（clutch/anchor/freeze 边沿）、bridge 状态行窗口化（+2s 增量/fb_age/
   max_err/held）；TASKS 立 T21（chain_monitor 只读外挂）。回归 19/19 OK。
 
+- 频率链分析（对话）：下行有效下发率 ~1-3Hz（movej 程序语义钳制）为跟手性第一瓶颈，
+  canfd 50Hz 流式为协议原生解且零开发量 → T09 升级 P1 并具体化台架清单；
+  反馈提频此前无任务 → 新立 T22（30→60-100Hz，容量验证优先）。
+
 ## 当前状态与下一步
 
 - 本地 vs 远端：`tools/exton_bridge.py` **领先远端**（远端仍是 fe58738a 版）；
