@@ -64,6 +64,13 @@ T5 ik_node（pink IK, 250Hz）: 增量遥操核心，离合锚定逻辑都在这
 
 组件管理：`~/桌面/dm-exo/start_teleop.sh` / `stop_teleop.sh`，日志 `~/桌面/dm-exo/logs/T{1..5}_*.log`
 
+**当前接手必读的启动入口（2026-11-06）**：现场恢复遥操使用
+`~/桌面/dm-exo/restart_teleop.sh`。它会清场、检查 `.15/.60` 网络、检查 30485 单连接、
+启动 T1–T5，并验证 T3 已同步反馈且收到 `joint_commands`。T5 固定左臂 X 镜像
+`[-1,1,1]`，每次启动后关闭 `publish_commanded_ee_state`。若 T3 已连接但运动时出现
+`program_run_failed`，这是控制器/电机执行层拒绝，不能误判为 bridge 没启动；先由操作员在
+5566 检查 fault/enable、关闭图形界面，再重启软件链。`auto_enable=false` 不得绕过。
+
 ## 二、今日已修复（全部在 ik_node.py，src↔build 硬链接，改完重启 T5 即生效）
 
 路径：`.../exton_ros2_retargeting_demo/src/robot_ik_retargeting/robot_ik_retargeting/ik_node.py`

@@ -734,3 +734,153 @@ average rate: 250.762
 - 现场待做（操作员）：找到臂的**真正供电开关**（基座开关/指示灯）确认电机主控供电；
   若供电确认正常仍零应答 → 厂家检修（T24+T26 合并报修）。
 - 现场变更：无新变更（固件保持手动启动运行态）。
+
+## 2026-11-06 14:2x–14:3x | 启动门禁修复 + CANFD 遥操恢复 + 手静漂移取证 | Codex + 操作员
+
+- 启动脚本修复（本地与远端已同步）：
+  - `tools/dm-exo/start_teleop.sh`、`start_bridge_only.sh` 增加 `.15/.60` ping 门禁、
+    30485 单连接占用检查、T3 存活/连接/反馈同步/ROS 指令接收验证；T3 失败时不再继续
+    宣称全链成功；清场补充 `robot_state_publisher`/`rviz2`。
+  - 远端原文件备份后推送；远端 SHA256：`start_teleop.sh`
+    `22cfccc157c1989c5f15e20a9e40e2ef156e5a29233da365a482949791559e59`，
+    `start_bridge_only.sh`
+    `9c1eab6685c749ad3d7e49eed66873b4bd09e3d96978c78b2c44c622d22`。
+- 全链启动原文证据：T1/T2/T3/T4/T5 全部启动；T3 日志确认“已连接控制器”、
+  “已用 get_joint_position 同步”，随后 `cmd_rx>0`；30485 ESTAB 的进程为 T3 Python；
+  仅一个 robot_state_publisher。参数保持 `control_mode=movej_canfd`、`move_speed=15`、
+  `auto_enable=false`、`use_archive_right_limits=false`。
+- 真机验证：`press02_left_142621.npz` 左离合按住 4.2s，外骨骼移动 698mrad，
+  IK 瞬跳 0，真机移动 78mrad，bridge reject=0。操作员随后确认设备已经可以正常遥控，
+  证明 ROS→bridge→30485 CANFD→真机链路恢复。
+- 风险取证：`press03_left_142721.npz` 长按约 47.5s；0.5s 手静窗口最坏出现
+  外骨骼 6.2mrad、IK Joint7L 114.0mrad、真机 86.2mrad，而末端目标仅
+  4.6mm/0.46°。证据支持“上游小变化/残余误差→近奇异 IK 冗余轴漂移→CANFD 正确跟随”，
+  不是 CAN 通讯拒绝；该风险尚未修复。
+- 安全处置：长按测试后已运行 `stop_bridge_only.sh`，T3 停止；离合最终回到 false，
+  录包器与监视器停止，其余 T1/T2/T4/T5 保留运行。再次启动遥操前必须清场并确认
+  30485 唯一连接；测试先短时、低速，手静自运动立即松开离合。
+
+## 2026-11-06 14:31 | 操作员要求恢复遥操，全链安全重启 | Codex + 操作员
+
+- 执行：远端依次运行 `stop_teleop.sh`、`start_teleop.sh`，先清掉重复 MessageBridge 与
+  旧进程，再按新门禁启动全链。
+- 启动原文：`.15/.60 网络正常`、`30485 未被本机其他客户端占用`、T1–T5 全部成功、
+  `T3 已收到 joint_commands，ROS → canfd 桥接链路完整`。
+- 启动后无运动基线：30485 唯一 ESTAB 进程为 T3 `python3 pid=96132`；
+  robot_state_publisher 数量=1；T3 状态 `connected=True`、`fb_synced=True`、
+  `cmd_rx=2369`、`sent=0`、`reject=0`、`max_err=0.000`、`ik_moved=0`。
+- 现场状态：遥操已启动，等待操作员按住离合做短时、极慢、小范围效果检查。
+
+## 2026-11-06 14:54 | 左臂方向反转离线定责 + T26 复发（电机死亡时刻首次被录包捕获） | ZCode + 操作员
+
+- 动作：拉取远端 press02/03_left_142x 与新录 dir01_left.npz（本机 14:41 起用 record_compare.py 240s
+  只读录包，恰覆盖事发窗）；离线逐关节/末端三段链路分析；pexpect 经 tc 主机只读控制器 CAN 统计。
+- 证据（原文/数字）：
+  - **上游无罪**：dir01_left.npz 段#1 外骨骼末端左位移 x=+0.2603m（操作员前推），目标末端 x=+0.2603m，
+    `exo末端x vs tgt末端x: corr=+1.000`；段#2 回拉 x=-0.2157 ↔ 目标 -0.2163，同样 +1.000。
+  - **IK 按 URDF 自洽**：URDF-FK(指令) ↔ 目标 corr x:+0.999。
+  - **真机半执行后死亡**：段#1（t=61.1–70.0）左臂净跟踪比值 J4L=0.526 J5L=0.447 J7L=0.644，
+    J1L/J3L/J6L≈0（J1L corr=-0.194）；对照 press02_left_142621.npz（14:26）比值 0.93–1.05 全轴忠实 →
+    14:26→14:42 之间机器劣化。
+  - **死亡时刻**：`左臂反馈最后一次变化: t=66.43s (wall≈1793947328)`；本 T3 会话（14:31 起）首条拒绝
+    `[ERROR] [1793947327.080945998] 控制器拒绝运动 movej_canfd program_run_failed (累计1)`——同一秒。
+    此后 172s 跨 5 次按压左臂 7 轴段首值逐位相同（J1L +26.95° J4L -33.48° J7L -148.64°，极差 0.00 mrad）
+    =固件返回锁存缓存。右臂同期仅 0.096mrad 量化噪声。会话累计拒绝 ~920（46 行×20 节流）。
+  - **限位余量**：拒绝起点 J4L=-32.75°（GUI 限位 -39.5°，余 6.8°）、J7L=-148.6°（限 ±159.9°，余 11.3°）；
+    而 IK 段#1 净指令 J4L -0.607rad(-34.8°) J7L -0.789rad(-45.2°)——按真机限位双双越界；bridge 左臂
+    用 URDF_LIMITS_RAD=±(3.14-0.05)rad 裁剪（tools/exton_bridge.py:91/681），T23 动态限位未部署。
+  - **控制器 CAN 现况**：can0 RX=0 TX=946,762；can1 RX=0 TX=920,810（TX_ERR=RX_ERR=0）；
+    /proc/net/can/stats RXF=0——电机零应答（T26 同签名），但今天 14:42 前电机确认执行过运动
+    （段#1 反馈在变），即「电机在遥操中死亡」首次被完整录包捕获。
+- 结论：
+  1. 方向反转定责：上游映射与 IK 均无罪（corr 1.000/0.999），反向发生在 URDF→真机运动学映射层
+     （T20 结构性不一致的遥操表现），与「肩膀方向翻转表待建」一致——未验证项=逐轴翻转量（探针跑通才有）。
+  2. 手臂不动断点：S7 电机/CAN 层再次零应答（T26 复发）；触发条件与「按 URDF 宽限位驱动 J4L/J7L
+     逼近真机软限位」强相关（时间耦合精确到秒），但因果方向未实锤。
+- 未验证：GUI 限位页数值是否即左臂真机限位（需 get_config 复核左臂 7 轴）；半执行(~50%)机制
+  （canfd freq 钳制?）；越界→电机保护跳的因果；「向后」体感与镜像预测的逐轴对账。
+- 下一步：① 操作员按 T26 恢复链处理（断电重启/查 5566 故障码/查供电）；② 恢复后**先别跑左臂遥操**——
+  限位不修必复发，建议 T23 部署或临时把 bridge 左臂限位改为 get_config 值；③ 电机活了先重跑
+  urdf_axis_probe.py 建翻转表（T20 路线）；④ T26 报修包加「遥操中死亡」实录证据。
+- 现场变更：启动过一次只读录包（已自动结束，产物 /home/tc/桌面/dm-exo/dir01_left.npz，24.5MB）；
+  经 tc 主机 pexpect 只读读取控制器 CAN 统计（ip -s link show can0/can1、/proc/net/can/stats）。
+  未重启/杀任何进程，未改任何远端文件。
+
+## 2026-11-06 15:2x | T27 修复部署：bridge 真机限位补丁 + T5 左臂 x 镜像 + 全链重启 | ZCode
+
+- 动作：
+  1. 停 T3 bridge（stop_bridge_only.sh）→ `collect_samples.py --config` 拉真机软限位
+     （**首次落盘**：/home/tc/tcvg/urdf_fk_calib/config_limits_1106_150922.json）
+  2. bridge 限位补丁：远端 /home/tc/tcvg/exton_bridge.py 新增 LIVE_LIMITS_RAD（get_config 实测值
+     + 0.02rad 内缩），替换左右臂 URDF_LIMITS_RAD 引用（原 `self.left_limits = URDF_LIMITS_RAD`
+     → `list(LIVE_LIMITS_RAD)`；右臂 else 分支同改）。备份 exton_bridge.py.bak_1506，
+     **新 md5 95f18a791f544e5e0136d053bba8cbce**（基线 01597472 的增量补丁，T23 仍未整体部署）
+  3. stop_teleop.sh + start_teleop.sh 全链重启（一次失败：补丁误删 URDF_LIMITS_RAD 定义行
+     NameError，当轮修复后 8 门全绿）
+  4. T5 重启带 `mirror_xyz_left:="[-1.0, 1.0, 1.0]"`（launch 日志原文：
+     `mirror L=[-1.0, 1.0, 1.0] R=[1.0, 1.0, 1.0]`），启动脚本 /tmp/launch_t5_mirror.sh
+  5. `ros2 param set /ik_retargeting publish_commanded_ee_state False`（T11 条件，重启后已重设）
+- 证据：
+  - get_config 原文：lowerLimits=[-2.79,-2.3562,-2.79,-0.69,-2.79,-1.57,-2.79, …同右臂]，
+    upperLimits=[2.79,0.26,2.79,2.26,2.79,1.57,2.79, …]——**左右臂完全对称**，与 GUI 截图逐项吻合
+    （J2=[-135°,+14.9°] J4=[-39.5°,+129.5°] J6=±90° 其余 ±159.9°）；J4 下限 -0.69rad 即昨日
+    电机死亡时 J4L 逼近值（死时 -33.48°）
+  - T5 健康原文：`IK_STAT clutch=L:0,R:0 … solve=0/501 win=2.00s`（2s 一条）；
+    `ros2 param get mirror_xyz_left` → `array('d', [-1.0, 1.0, 1.0])`
+  - T3 原文：`cmd_rx=39243 … rx=488 reject=0 fb_age=0.03s held=14`（IK 250Hz 发布、控制器应答正常）
+  - can0 现况：RX=0 / TX=877,435——**电机仍未应答，待 enable**
+- 过程坑（两次踩雷，均有现场证据）：
+  1. 临时 launcher 漏 `export ROS_DOMAIN_ID=42` → ik_node 起在 domain 0：init 行照打、
+     IK_STAT 也有（20% CPU 在跑），但域 42 图上隐形（param get "Node not found"、cmd_rx 冻结）。
+     修复=launcher 首行补 export（对照实验证实与 mirror 参数无关）
+  2. `pgrep -f`/`kill $(pgrep -f)` 与含明文 `robot_ik_retargeting` 的命令同 ssh 调用 → 两次
+     杀掉自己会话（exit 255）——AGENTS 禁忌①的实录变体
+- 未验证：enable 后 CAN RX 是否恢复（电机层 T26）；镜像后左臂方向是否正确（待操作员真机验证）；
+  限位补丁下桥不会把臂推过真机软限位（逻辑推断，未实测）
+- 下一步：操作员 5566 登录 enable → **关闭网页** → 短测试；方向验证 OK 后把 mirror 参数固化进
+  start_teleop.sh（当前是临时 launcher，**下次 start_teleop.sh 重启 T5 会回 [1,1,1]**）
+- 现场变更：bridge 限位补丁（备份 bak_1506）；全链两次重启；T5 现以 /tmp/launch_t5_mirror.sh
+  运行（镜像 [-1,1,1]）；publish_commanded_ee_state=False 已设；get_config 首次落盘。
+  未改 start_teleop.sh / ik_node.py / URDF。
+
+## 2026-11-06 15:5x | “又不动”现场断点 + 一键重启脚本固化 | Codex + 操作员
+
+- 当前断点证据：T3 `pid=98474` 存活并独占 `192.168.61.60:30485`（ESTAB）；
+  `/target_robot/joint_commands` 为 1 pub / 1 sub，`/client_robot/joint_states` 为
+  1 pub / 3 sub；T3 持续 `connected=True`、`fb_synced=True`、`cmd_rx` 增长。
+  因此本次不是 bridge 未启动。
+- 运动失败证据：T3 在运动窗口累计收到约 300 条
+  `控制器拒绝运动 movej_canfd program_run_failed`；松开离合后恢复 `sent=0`、
+  `max_err=0`。当前只能确认控制器/电机执行层拒绝，未在本条记录中把“未 enable”或
+  “fault”任一候选写成已证实根因。
+- 脚本改动：
+  1. `start_teleop.sh` 固化 T27 的 `mirror_xyz_left=[-1,1,1]`，并在每次 T5 重启后强制
+     `publish_commanded_ee_state=false`；任一参数设置失败即整链失败。
+  2. 新增 `restart_teleop.sh`：一键执行完整清场→启动→终检；要求 T3 进程、30485 ESTAB、
+     `cmd_rx>0` 三项同时成立，并明确区分“软件链已起”和“控制器拒绝运动”。
+  3. 保留 `auto_enable=false` 安全门禁；脚本不会远程使能机械臂。
+- 部署：远端 `~/桌面/dm-exo/` 已更新并赋可执行权限，原 start 脚本已时间戳备份；
+  `bash -n` 通过。SHA256：start=`7c12a814bc6133c95c5b35dedc5ab111fbd7aa02c0a9eedd723e4828bcad0ad3`，
+  restart=`7962abd5a96edc969ce096bb6313c745aa69b0fbb4e9def2036008595798c986`。
+
+## 2026-11-06 15:34–15:35 | 操作员要求整链重启，一键脚本现场修正并通过 | Codex + 操作员
+
+- 首次执行 `restart_teleop.sh`：T1–T5 实际均已启动，但 `start_teleop.sh` 主 shell 未 source
+  ROS 环境，执行 `ros2 param set` 报 `timeout: 无法运行命令 "ros2": 没有那个文件或目录`，
+  脚本正确以失败退出。修复为参数设置子 shell 显式 source Humble 并导出 domain 42；远端备份、
+  同步、`bash -n` 通过，新 start SHA256=
+  `f38108dea01e0e0a65eb007f4575015c94dc734f8bb9cf42e78cbbf04789a1b2`。
+- 第二次完整清场重启成功：网络与 30485 门禁通过；T1–T5 全绿；左臂 X 镜像与
+  `publish_commanded_ee_state=false` 固化成功；T3 收到 joint_commands。
+- 无离合终检原文：`connected=True cmd_rx=790 sent=0 fb_synced=True skip=nodelta`，
+  `+2s: sent=0 rx=500 reject=0 fb_age=0.01s max_err=0.000 held=14 jump=0 ik_moved=0`。
+  软件链路当前正常；机器人仍保持 `auto_enable=false`，运动执行需控制器人工使能且无 fault。
+
+## 2026-11-06 15:4x | 将一键启动规则写入接手 AI 必读文档 | Codex
+
+- 更新 `AGENTS.md`：新增强制使用 `~/桌面/dm-exo/restart_teleop.sh` 的接手规则、网络/30485
+  门禁、T1–T5 成功证据、T5 镜像与参数固化、`program_run_failed` 的分层判读，以及
+  `auto_enable=false` 安全要求。
+- 更新 `HANDOFF.md`：在系统架构入口处增加当前启动脚本和“bridge 连接不等于控制器可运动”
+  的醒目标注，指向 5566 enable/fault 检查流程。
+- `git diff --check` 通过；本次只修改本地交接文档，未改变真机运行进程。

@@ -69,6 +69,8 @@ export ROS_DOMAIN_ID=42 ROS_LOCALHOST_ONLY=0
 # 全链路
 ~/桌面/dm-exo/start_teleop.sh
 ~/桌面/dm-exo/stop_teleop.sh
+# 推荐的一键重启（清场→启动→运行态终检）
+~/桌面/dm-exo/restart_teleop.sh
 
 # 只重启 T3（改 bridge 后）
 pgrep -f "exton_bridg""e.py" | xargs -r kill
@@ -85,6 +87,36 @@ setsid nohup bash -c "source /home/tc/.../exton_ros2_retargeting_demo/pink/bin/a
   ros2 launch robot_ik_retargeting ik_retargeting.launch.py" \
   >> ~/桌面/dm-exo/logs/T5_ik.log 2>&1 &
 ```
+
+### 3.1 接手 AI 必须执行的一键启动规则（2026-11-06 固化）
+
+现场恢复遥操时，默认只使用：
+
+```bash
+sshpass -p ' ' ssh -p 2222 tc@127.0.0.1 '~/桌面/dm-exo/restart_teleop.sh'
+```
+
+脚本会按顺序清理旧 T1–T5、检查 `192.168.61.15` 与 `192.168.61.60`、确认本机没有
+其他客户端占用 TCP `30485`，再启动 T1 MessageBridge、T2 FK/RViz、T3 bridge、T4
+Puppetry、T5 IK。T5 启动时固定 `mirror_xyz_left=[-1,1,1]`，并设置
+`publish_commanded_ee_state=false`。
+
+只有同时看到以下证据，才能说“软件链启动成功”：
+
+- T3 日志出现“已连接控制器”与“已用 get_joint_position 同步”；
+- `30485` 有且只有 T3 的 ESTAB 连接；
+- `/target_robot/joint_commands` 已被 T3 收到（`cmd_rx>0`）；
+- 无离合基线为 `sent=0`、`reject=0`、`max_err=0`。
+
+重要区分：T3 进程存活、30485 已连接，不等于机械臂可执行运动。若按离合后日志出现
+`program_run_failed`，应判为控制器未 enable、控制器 fault 或电机/CAN 执行层拒绝，
+不能重复杀起 bridge 作为修复。先松开离合，在 5566 检查/清故障并由操作员人工 enable，
+关闭图形界面释放 30485 后，再运行上述一键脚本。`auto_enable=false` 是安全门禁，脚本
+不得改成远程自动使能。
+
+2026-11-06 15:34 的现场实测曾暴露脚本自身遗漏 ROS 环境：`ros2 param set` 报
+“没有那个文件或目录”。现版已在参数设置子 shell 中显式 source `/opt/ros/humble/setup.bash`
+并导出 `ROS_DOMAIN_ID=42`；修改启动脚本后必须 `bash -n`、备份远端旧文件并做 SHA256 对比。
 
 ## 4. 硬性禁忌（都踩过）
 
