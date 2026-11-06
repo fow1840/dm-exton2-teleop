@@ -408,3 +408,22 @@ average rate: 250.762
   左臂真机软限位。
 - 下一步：明早按 TASKS T20 执行序列跑采数与判决。
 - 现场变更：无（未连现场；新工具在本地，届时 scp 到 tc 主机）。
+
+## 2026-11-06 03:2x | 信号链路模块定位图成文 | ZCode
+
+- 动作：重新抓取 ik_node.py / exton_bridge.py 当日快照的函数级行号锚点（两文件今日
+  均有改动，防旧行号误导），产出 docs/信号链路模块定位图.md（S1~S7 环节 ×
+  锚点表 × 话题字典 × 日志判读 × 按症状反查表 × 定位工具箱）。
+- 证据原文（锚点核对命令与输出节选）：
+  - ik_node.py：target_cb=320、control_loop=378（按臂重置 392-397 / await_anchor 424-462 /
+    死区 476-488 / 手静冻结 494-499 / solve_ik 501-509 / 积分 524-534 / 发布 540 /
+    指令FK条件发 540-545）、_publish_ee_states=547；
+  - exton_bridge.py：StepPlanner.plan=190 / invalidate=182 / connect=316 / _tx_loop=425 /
+    _feed=516 / _flush_commands=753 / _build_motion_payload=880 / _publish_joint_states=896 /
+    _status_watchdog=931 / main=984；
+  - ROS 接线：ik_node 274-285（订 (D)(C)(B)，发 (F)(E)+TF+250Hz timer）；
+    fk_adapter 26-34（yield_when_clutch 20-22 行）；bridge 660-675（四 timer）。
+- 结论：每个环节（含 vendor 组件的配置文件/二进制路径）都有了「文件:行号:职责」
+  锚点与首查命令；行号以函数名为准（远端部署前行号会漂）。
+- 未验证：无（纯文档化，全部锚点经当日 grep 核对）。
+- 现场变更：无（本地新增 docs/信号链路模块定位图.md 并入库）。
