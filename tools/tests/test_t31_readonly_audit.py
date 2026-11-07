@@ -88,7 +88,7 @@ class T31AuditScriptTests(unittest.TestCase):
 
         status = (output / "status.tsv").read_text().splitlines()
         self.assertEqual(len(status), 54)  # header + 53 bounded reads
-        self.assertTrue(all(line.endswith("\\t0") for line in status[1:]))
+        self.assertTrue(all(line.endswith("\t0") for line in status[1:]))
         self.assertTrue((output / "context.txt").exists())
         self.assertEqual(len(list(output.glob("*.txt"))), 54)  # context + 53 captures
         self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o700)
