@@ -228,6 +228,25 @@ def check_device(reply):
         raise ControllerStateError(detail)
 
 
+def inspect_controller(ctrl, host, port):
+    """Read the controller's raw preflight responses. Never sends a motion command."""
+    responses = {}
+    for command in ("get_device_state", "get_config", "get_joint_position", "get_tcp_pose"):
+        reply = ctrl.request(command)
+        responses[command] = {
+            "sent_monotonic_s": reply.sent,
+            "received_monotonic_s": reply.received,
+            "raw": reply.raw,
+        }
+    return {
+        "mode": "read_only_controller_inspection",
+        "host": host,
+        "port": port,
+        "timestamp_unix_s": time.time(),
+        "responses": responses,
+    }
+
+
 def read_q(reply):
     q = vector(reply.raw.get("joint"), N_JOINTS, "actual joint feedback")
     if HOLD in q:
@@ -461,6 +480,10 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--execute", action="store_true")
     mode.add_argument("--analyze", type=Path)
+    mode.add_argument("--inspect-controller", action="store_true")
+    parser.add_argument("--host")
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--rpc-timeout-s", type=float, default=1.0)
     parser.add_argument("--frames-verified", action="store_true")
     parser.add_argument("--min-rotation-rad", type=float)
     args = parser.parse_args(argv)
@@ -472,6 +495,25 @@ def main(argv=None):
             if not args.frames_verified or number(args.min_rotation_rad, "rotation threshold") <= 0:
                 raise ProbeError("analysis requires verified frames and a positive rotation threshold")
             print(json.dumps(analyze(args.urdf, args.analyze, args.min_rotation_rad)))
+            return 0
+        if args.inspect_controller:
+            if args.plan or not args.host or args.port is None or not 1 <= args.port <= 65535:
+                raise ProbeError("--inspect-controller requires --host and --port; do not pass --plan")
+            timeout_s = number(args.rpc_timeout_s, "RPC timeout")
+            if timeout_s <= 0:
+                raise ProbeError("RPC timeout must be positive")
+            sock = socket.create_connection((args.host, args.port), timeout=timeout_s)
+            ctrl = Controller(sock, timeout_s)
+            try:
+                report = inspect_controller(ctrl, args.host, args.port)
+            finally:
+                ctrl.close()
+            rendered = json.dumps(report, indent=2, allow_nan=False)
+            if args.output:
+                with args.output.open("x", encoding="utf-8") as output:
+                    output.write(rendered + "\\n")
+            else:
+                print(rendered)
             return 0
         plan = None
         if args.plan:
