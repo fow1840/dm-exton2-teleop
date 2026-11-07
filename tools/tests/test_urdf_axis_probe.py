@@ -61,9 +61,24 @@ class FakeController:
         self.commands.append(command)
         raw = {"command": command, "status": probe.SUCCESS}
         if command == "get_device_state":
+            state_fault = self.fault == "fault" or (
+                self.fault == "fault_after_move" and self.moves > 0
+            )
             raw.update(state="idle", erroeCode=0, hardwareErrors=[],
-                       softwareErrors=[123] if self.fault == "fault" else [],
+                       softwareErrors=[123] if state_fault else [],
                        motorErrorDetails=None)
+            if self.fault == "missing_state":
+                raw.pop("state")
+            if self.fault == "missing_hardware_errors":
+                raw.pop("hardwareErrors")
+            if self.fault == "missing_software_errors":
+                raw.pop("softwareErrors")
+            if self.fault == "missing_motor_details":
+                raw.pop("motorErrorDetails")
+            if self.fault == "missing_error_code":
+                raw.pop("erroeCode")
+            if self.fault == "motor_detail":
+                raw["motorErrorDetails"] = [{"motor": 1, "error": "overcurrent"}]
         elif command == "get_config":
             joints = [name for side in probe.SIDES for name in probe.arm_joints(side)]
             raw["lowerLimits"] = [LIMITS[name][0] for name in joints]
@@ -91,7 +106,9 @@ class FakeController:
                        if i != self.plan.index)
             if self.fault == "disconnect":
                 raise ConnectionError("transport disconnected")
-            if self.fault != "frozen" and not (self.fault == "return" and self.moves == 2):
+            if self.fault not in ("frozen", "stale_feedback") and not (
+                self.fault == "return" and self.moves == 2
+            ):
                 self.q[self.plan.index] = payload["joint"][self.plan.index]
         elif command == "stop_motion" and self.fault == "disconnect":
             raise ConnectionError("stop unavailable")
@@ -129,20 +146,38 @@ class SamplingTests(unittest.TestCase):
                 self.assertEqual(samples[1]["tcp14"][0], 0.1)
                 self.assertEqual(samples[1]["tcp14"][7], 0.2)
                 self.assertAlmostEqual(samples[1]["tcp_rotation_from_baseline_rad"], 0.05)
+                left_quat = samples[1]["tcp14"][3:7]
+                right_quat = samples[1]["tcp14"][10:14]
+                moving_quat, stationary_quat = (
+                    (left_quat, right_quat) if side == "left" else (right_quat, left_quat)
+                )
+                self.assertAlmostEqual(moving_quat[1], math.sin(0.025))
+                self.assertAlmostEqual(stationary_quat[0], 1.0)
                 self.assertEqual(records[-1]["type"], "completed")
                 self.assertEqual(ctrl.commands.count("movej"), 4)
                 self.assertNotIn("stop_motion", ctrl.commands)
 
     def test_invalid_preflight_never_moves(self):
-        for fault in ("fault", "limit", "bad_q", "bad_tcp"):
+        for fault in ("fault", "missing_state", "missing_hardware_errors",
+                      "missing_software_errors", "missing_motor_details",
+                      "missing_error_code", "motor_detail", "limit", "bad_q", "bad_tcp"):
             with self.subTest(fault=fault):
                 ctrl, records = self.run_case(fault=fault)
                 self.assertNotIn("movej", ctrl.commands)
                 self.assertFalse(records[-1]["stop"]["attempted"])
 
+    def test_fault_after_motion_does_not_send_stop_motion(self):
+        ctrl, records = self.run_case(fault="fault_after_move")
+        self.assertEqual(ctrl.commands.count("movej"), 1)
+        self.assertNotIn("stop_motion", ctrl.commands)
+        self.assertEqual(records[-1]["type"], "aborted")
+        self.assertFalse(records[-1]["stop"]["attempted"])
+        self.assertFalse(records[-1]["stop"]["acknowledged"])
+        self.assertIn("skipped_reason", records[-1]["stop"])
+
     def test_motion_failures_stop_without_dispatching_later_points(self):
-        for fault, count in (("return", 2), ("frozen", 1), ("frozen_tcp", 1),
-                             ("disconnect", 1), ("unselected", 1)):
+        for fault, count in (("return", 2), ("frozen", 1), ("stale_feedback", 1),
+                             ("frozen_tcp", 1), ("disconnect", 1), ("unselected", 1)):
             with self.subTest(fault=fault):
                 ctrl, records = self.run_case(fault=fault)
                 self.assertEqual(ctrl.commands.count("movej"), count)
@@ -210,6 +245,32 @@ class AnalysisTests(unittest.TestCase):
 
 
 class WireTests(unittest.TestCase):
+    def test_controller_connection_conflict_aborts_before_motion(self):
+        with TemporaryDirectory() as temp:
+            cfg = plan()
+            plan_file = Path(temp) / "plan.json"
+            plan_file.write_text(json.dumps(probe.asdict(cfg)), encoding="utf-8")
+            output_file = Path(temp) / "probe.jsonl"
+            fingerprint = hashlib.sha256(
+                plan_file.read_bytes() + b"\\0" + URDF.read_bytes()
+            ).hexdigest()
+            fake_stdin = Mock()
+            fake_stdin.isatty.return_value = True
+            with patch.object(probe.sys, "stdin", fake_stdin), \\
+                    patch("builtins.input", return_value=f"RUN {fingerprint}"), \\
+                    patch.object(probe.socket, "create_connection",
+                                 side_effect=OSError("controller already has an owner")), \\
+                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                result = probe.main([
+                    str(URDF), "left", "--plan", str(plan_file),
+                    "--execute", "--output", str(output_file),
+                ])
+            self.assertEqual(result, 1)
+            records = [json.loads(line) for line in output_file.read_text().splitlines()]
+            self.assertEqual(records[-1]["type"], "aborted")
+            self.assertEqual(records[-1]["point"], "connect")
+            self.assertFalse(records[-1]["stop"]["attempted"])
+
     def test_fragmented_response_and_command_correlation(self):
         sock = Mock()
         sock.recv.side_effect = [
