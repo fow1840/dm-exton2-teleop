@@ -204,6 +204,13 @@ class SamplingTests(unittest.TestCase):
             probe.check_limits(cfg, LIMITS, probe.Reply({
                 "lowerLimits": [-3] * 14, "upperLimits": [3] * 14}, 0, 0))
 
+    def test_plan_rejects_unverified_base_or_arm_tcp_frame(self):
+        cfg = probe.asdict(plan())
+        with self.assertRaisesRegex(probe.ProbeError, "base_link"):
+            probe.Plan.from_json(json.dumps({**cfg, "base_frame": "world"}))
+        with self.assertRaisesRegex(probe.ProbeError, "Link7"):
+            probe.Plan.from_json(json.dumps({**cfg, "tcp_frame": "tool0"}))
+
     def test_default_and_noninteractive_execute_cannot_connect(self):
         with patch.object(probe.socket, "create_connection") as connect, \
                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
