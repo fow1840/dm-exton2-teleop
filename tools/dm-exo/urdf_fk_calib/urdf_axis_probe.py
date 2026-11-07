@@ -28,6 +28,10 @@ class ProbeError(RuntimeError):
     pass
 
 
+class ControllerStateError(ProbeError):
+    """Controller state is faulted or incomplete; do not issue recovery motion commands."""
+
+
 def number(value, label):
     if type(value) in (int, float):
         try:
@@ -199,12 +203,20 @@ class Controller:
 
 def check_device(reply):
     raw = reply.raw
+    required = ("state", "hardwareErrors", "softwareErrors", "motorErrorDetails")
+    missing = [key for key in required if key not in raw]
     codes = [raw[key] for key in ("erroeCode", "errorCode") if key in raw]
-    if (raw.get("state") not in ("idle", "ready") or not codes
+    if (missing
+            or not isinstance(raw.get("state"), str)
+            or raw.get("state") not in ("idle", "ready")
+            or not codes
             or any(type(code) is not int or code != 0 for code in codes)
-            or raw.get("hardwareErrors") != [] or raw.get("softwareErrors") != []
-            or raw.get("motorErrorDetails") not in (None, [])):
-        raise ProbeError(f"controller is not clear for probing: {raw!r}")
+            or type(raw.get("hardwareErrors")) is not list or raw["hardwareErrors"]
+            or type(raw.get("softwareErrors")) is not list or raw["softwareErrors"]
+            or (raw.get("motorErrorDetails") is not None
+                and (type(raw["motorErrorDetails"]) is not list or raw["motorErrorDetails"]))):
+        detail = f"missing required fields: {missing}" if missing else f"unusable controller state: {raw!r}"
+        raise ControllerStateError(detail)
 
 
 def read_q(reply):
@@ -344,8 +356,14 @@ def run_probe(ctrl, plan, limits, record):
             previous_target = target
         record({"type": "completed", "points": len(POINTS)})
     except (Exception, KeyboardInterrupt) as exc:
-        stop = {"attempted": motion_attempted, "acknowledged": False}
-        if motion_attempted:
+        stop = {"attempted": False, "acknowledged": False}
+        if isinstance(exc, ControllerStateError):
+            stop["skipped_reason"] = (
+                "controller state is faulted or incomplete; inspect and stop manually "
+                "using the site's verified procedure"
+            )
+        elif motion_attempted:
+            stop["attempted"] = True
             try:
                 stop["reply"] = asdict(ctrl.request("stop_motion"))
                 stop["acknowledged"] = True
