@@ -1,7 +1,7 @@
 # 左臂遥操作方向异常：AI 任务包与执行规则
 
 > 任务包版本：v1.0  
-> 适用范围：\`fow1840/dm-exton2-teleop\`  
+> 适用范围：`fow1840/dm-exton2-teleop`  
 > 上位任务：T29（末端增量方向标定）/ T30（关节方向探针）  
 > 本文新增任务：T31～T38  
 > 原则：先读证据、再做最小实验；先离线、后真机；一次只改变一个变量。
@@ -23,13 +23,13 @@
 
 以下是代码审查线索，不是最终根因结论：
 
-- 当前生效 URDF 的注释明确说明：右臂 Joint1～Joint7 保留厂家原始定义；左臂 Joint1L～Joint7L 的 joint origin 曾按右臂镜像重写，并提示左臂零位需要重新核对。参见 \`ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf\` 文件头。
-- 同目录 CSV 是 SolidWorks 原始导出数据，左臂 Joint Origin 列不等于当前修复版 URDF。CSV 与 URDF 的差异必须逐关节计算，不能只看 \`axis xyz="0 0 1"\`。
-- \`ik_node.py::target_cb()\` 当前读取 Pose 的 position / orientation，但没有读取或校验 \`header.frame_id\`。因此坐标系约定是隐式假设，需要查清发布端实际 frame。
-- \`start_teleop.sh\` 固化的 \`mirror_xyz_left=[-1,1,1]\` 与 launch 文件默认的单位映射不同。必须核对运行态参数，不能根据默认值推断现场实际值。
-- \`exton_bridge.py\` 的命令映射按 JointState 名称取值；已检查路径中未发现明确的左臂专属符号反转，但必须完整追踪反馈与命令两条路径后才能下结论。
-- T29 的 \`ArmPoseMap\`、\`sixdir_calib.py\` 和离线测试框架已实现；实现完成不代表已经取得真机标定数据。没有经过验收的 calibration JSON 不得当作已标定。
-- T30 的 \`urdf_axis_probe.py\` 是真机关节轴方向验证入口，但当前版本存在待处理的安全 / 数据完整性缺口，**不得直接运行原版脚本做真机微扰**。
+- 当前生效 URDF 的注释明确说明：右臂 Joint1～Joint7 保留厂家原始定义；左臂 Joint1L～Joint7L 的 joint origin 曾按右臂镜像重写，并提示左臂零位需要重新核对。参见 `ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf` 文件头。
+- 同目录 CSV 是 SolidWorks 原始导出数据，左臂 Joint Origin 列不等于当前修复版 URDF。CSV 与 URDF 的差异必须逐关节计算，不能只看 `axis xyz="0 0 1"`。
+- `ik_node.py::target_cb()` 当前读取 Pose 的 position / orientation，但没有读取或校验 `header.frame_id`。因此坐标系约定是隐式假设，需要查清发布端实际 frame。
+- `start_teleop.sh` 固化的 `mirror_xyz_left=[-1,1,1]` 与 launch 文件默认的单位映射不同。必须核对运行态参数，不能根据默认值推断现场实际值。
+- `exton_bridge.py` 的命令映射按 JointState 名称取值；已检查路径中未发现明确的左臂专属符号反转，但必须完整追踪反馈与命令两条路径后才能下结论。
+- T29 的 `ArmPoseMap`、`sixdir_calib.py` 和离线测试框架已实现；实现完成不代表已经取得真机标定数据。没有经过验收的 calibration JSON 不得当作已标定。
+- T30 的 `urdf_axis_probe.py` 是真机关节轴方向验证入口，但当前版本存在待处理的安全 / 数据完整性缺口，**不得直接运行原版脚本做真机微扰**。
 - WORKLOG 中的 T20 FK 残差是历史证据。执行前先确认样本、TCP 定义、四元数顺序、基坐标系和当前 URDF 版本；不可脱离样本条件把历史数值当成今天的现场结论。
 
 ## 1. 任务依赖总览
@@ -48,7 +48,7 @@
 - T37：姿态方向与低倍率端到端验收（依赖 T36 PASS）
 - T38：结案、文档和任务状态回写（依赖前序任务结论）
 
-任何任务被现场硬件故障阻塞时，状态改为 \`BLOCKED\`，写明需要的人工 / 厂家条件；不要为了推进任务绕过门禁。
+任何任务被现场硬件故障阻塞时，状态改为 `BLOCKED`，写明需要的人工 / 厂家条件；不要为了推进任务绕过门禁。
 
 ## 2. 任务卡
 
@@ -61,24 +61,24 @@
 
 **执行步骤**
 
-1. 阅读 \`AGENTS.md\`、\`HANDOFF.md\`、\`TASKS.md\` 的 T29/T30，以及 \`docs/机器人现场调试手册.md\`。
+1. 阅读 `AGENTS.md`、`HANDOFF.md`、`TASKS.md` 的 T29/T30，以及 `docs/机器人现场调试手册.md`。
 2. 按现有现场访问流程确认 ROS_DOMAIN_ID、节点名称和进程归属；不得自行重启任何节点。
 3. 只读采集 IK 参数，至少包括：
-   - \`mirror_xyz_left/right\`
-   - \`position_map_left/right\`
-   - \`orientation_map_left/right\`
-   - \`position_scale_left/right\`
-   - \`orientation_scale_left/right\`
-   - \`calib_file_left/right\`
-   - \`ee_position_cost\`、\`ee_orientation_cost\`
-   - \`publish_commanded_ee_state\`
+   - `mirror_xyz_left/right`
+   - `position_map_left/right`
+   - `orientation_map_left/right`
+   - `position_scale_left/right`
+   - `orientation_scale_left/right`
+   - `calib_file_left/right`
+   - `ee_position_cost`、`ee_orientation_cost`
+   - `publish_commanded_ee_state`
 4. 只读检查下列话题的 publisher、消息类型、频率和一帧消息：
-   - \`/target_robot/left_ee/target\`、\`/target_robot/right_ee/target\`
-   - \`/target_robot/left_ee/state\`、\`/target_robot/right_ee/state\`
-   - \`/client_robot/joint_states\`
-   - \`/target_robot/joint_commands\`
-5. 记录每条 PoseStamped 的 \`header.frame_id\`、时间戳、左右臂是否使用同一坐标约定。若 frame 为空，明确记录为空，不得自行猜测。
-6. 对照 \`ik_node.py::target_cb()\`、Puppetry / FK adapter 的发布代码，写清楚“发布端坐标系 → IK 解释坐标系 → URDF base_link”的实际契约。
+   - `/target_robot/left_ee/target`、`/target_robot/right_ee/target`
+   - `/target_robot/left_ee/state`、`/target_robot/right_ee/state`
+   - `/client_robot/joint_states`
+   - `/target_robot/joint_commands`
+5. 记录每条 PoseStamped 的 `header.frame_id`、时间戳、左右臂是否使用同一坐标约定。若 frame 为空，明确记录为空，不得自行猜测。
+6. 对照 `ik_node.py::target_cb()`、Puppetry / FK adapter 的发布代码，写清楚“发布端坐标系 → IK 解释坐标系 → URDF base_link”的实际契约。
 
 **交付物**
 
@@ -101,10 +101,10 @@
 
 **输入文件**
 
-- 当前模型：\`ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf\`
-- 当前配套原始 CSV：\`ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.csv\`
-- 产品包厂家原始 URDF / CSV：\`DM-EXton2ProductPackage_tianchuang/URDF/\` 下对应型号目录
-- 下载包 URDF：\`DM-EXton2ProductPackage_tianchuang/exton_ros2_retargeting_demo/src/download/hr_up_7dof_fixed/\`
+- 当前模型：`ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf`
+- 当前配套原始 CSV：`ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.csv`
+- 产品包厂家原始 URDF / CSV：`DM-EXton2ProductPackage_tianchuang/URDF/` 下对应型号目录
+- 下载包 URDF：`DM-EXton2ProductPackage_tianchuang/exton_ros2_retargeting_demo/src/download/hr_up_7dof_fixed/`
 
 **执行步骤**
 
@@ -127,8 +127,8 @@
 
 **交付物**
 
-- 新增 \`docs/URDF左右臂关节轴离线审计.md\`，包含逐关节对照表、世界轴向量、FK 对账条件、文件 hash 和结论。
-- 若新增脚本，放在 \`tools/dm-exo/urdf_fk_calib/\`，必须有离线测试；不得自动改写 URDF。
+- 新增 `docs/URDF左右臂关节轴离线审计.md`，包含逐关节对照表、世界轴向量、FK 对账条件、文件 hash 和结论。
+- 若新增脚本，放在 `tools/dm-exo/urdf_fk_calib/`，必须有离线测试；不得自动改写 URDF。
 
 **验收**
 
@@ -142,39 +142,39 @@
 - 优先级：P0
 - 类型：代码任务；默认离线，严禁连接真机
 - 依赖：无
-- 目标：让 \`urdf_axis_probe.py\` 在数据正确、故障可识别、异常可停止、回位可验证的前提下，才具备真机执行资格。
+- 目标：让 `urdf_axis_probe.py` 在数据正确、故障可识别、异常可停止、回位可验证的前提下，才具备真机执行资格。
 
 **当前已知待检查点**
 
-- \`Ctrl.dev()\` 当前主要返回 \`state\`，不能只凭 \`idle/ready\` 忽略 \`hardwareErrors\`、\`softwareErrors\` 和电机错误明细。
-- 当前探针读取 \`get_tcp_pose\` 后，对左右臂都直接使用前 7 个数；若控制器返回 14 维且顺序为左 7 + 右 7，right 模式会错误使用左 TCP。必须先用协议说明 / 原始响应确认字段顺序，再实现 side slice。
-- 当前 \`LIM\` 是脚本内固定表，不能未经核对就当作现场当前限位。需要使用当前控制器 get_config 数据或要求操作员提供并确认当次限位快照。
-- \`drive_to()\` 需要检查反馈新鲜度、每步实际进度、异常应答和超时；不能仅根据本地构造的 command frame 推断已到位。
+- `Ctrl.dev()` 当前主要返回 `state`，不能只凭 `idle/ready` 忽略 `hardwareErrors`、`softwareErrors` 和电机错误明细。
+- 当前探针读取 `get_tcp_pose` 后，对左右臂都直接使用前 7 个数；若控制器返回 14 维且顺序为左 7 + 右 7，right 模式会错误使用左 TCP。必须先用协议说明 / 原始响应确认字段顺序，再实现 side slice。
+- 当前 `LIM` 是脚本内固定表，不能未经核对就当作现场当前限位。需要使用当前控制器 get_config 数据或要求操作员提供并确认当次限位快照。
+- `drive_to()` 需要检查反馈新鲜度、每步实际进度、异常应答和超时；不能仅根据本地构造的 command frame 推断已到位。
 - 需要在异常退出时保证停止动作并关闭 socket；正常路径也要验证回到初始关节角。
 - 当前脚本没有清晰的“默认只读 / 明确授权才执行”入口。
 
 **执行要求**
 
 1. 默认运行只能做 URDF 加载、关节名称检查、TCP 响应解析自测和运动计划 dry-run；不得建立控制器连接或发送运动命令。
-2. 真机执行必须显式提供 \`--execute\`，并要求操作者二次确认；无确认立即退出。
+2. 真机执行必须显式提供 `--execute`，并要求操作者二次确认；无确认立即退出。
 3. 解析并校验 get_device_state：state、hardwareErrors、softwareErrors、motorErrorDetails、协议错误码。任何非空故障、未知状态或响应缺失均 fail-closed，不得继续。
 4. 解析 get_config 的当前软限位；每个目标角都要在限位内保留安全余量。限位不可读或与当前 URDF 不一致时停止。
 5. 明确校验控制器关节向量长度、腰/头占位槽、左右臂索引和 URDF joint name；长度或顺序不符合协议时禁止发送。
-6. 对 \`get_tcp_pose\` 做独立解析函数，按确认后的协议顺序选择 left / right 7D 子向量；四元数必须检查长度、有限值和模长。
+6. 对 `get_tcp_pose` 做独立解析函数，按确认后的协议顺序选择 left / right 7D 子向量；四元数必须检查长度、有限值和模长。
 7. 每次微扰前记录 q0 / TCP0；运动中轮询反馈，检查实际位移、反馈新鲜度和控制器错误；达到目标后记录 q1 / TCP1。
 8. 每个关节微扰后回到 q0，并通过新一帧反馈确认回位误差在明确阈值内。回位失败不得自动继续下一个关节。
-9. 使用 \`try/finally\` 管理 stop_motion 和 socket close。若控制器已 fault，不能假设 stop_motion 可以恢复；应停止发新命令并交由操作员处理。
+9. 使用 `try/finally` 管理 stop_motion 和 socket close。若控制器已 fault，不能假设 stop_motion 可以恢复；应停止发新命令并交由操作员处理。
 10. 将旋转轴点积、位置点积和阈值判定抽成纯函数，使用 mock / fixture 覆盖 left / right、故障、超时、错误长度、零四元数、回位失败等路径。
 
 **交付物**
 
-- 修订后的 \`tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py\`
-- 新增 \`tools/tests/test_urdf_axis_probe.py\` 或等价离线测试
+- 修订后的 `tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py`
+- 新增 `tools/tests/test_urdf_axis_probe.py` 或等价离线测试
 - 更新探针使用说明：默认 dry-run、真机授权步骤、输出字段和中止条件
 
 **验收**
 
-- 默认执行不连接 \`192.168.61.60:30485\)，不发送任何运动指令。
+- 默认执行不连接 `192.168.61.60:30485\)，不发送任何运动指令。
 - 测试证明 right TCP 不会误读 left TCP。
 - 任一故障 / stale feedback / 非法数据都 fail-closed。
 - 正常微扰路径有回位验证；异常路径有安全停止和资源清理。
@@ -229,11 +229,11 @@
 
 **硬规则**
 
-- 先写清楚数学定义，例如 \`q_model = S · q_ctrl + b\`，以及反向命令转换 \`q_ctrl_cmd = S⁻¹ · (q_model_cmd - b)\`；对角符号矩阵 S、零位偏置 b、关节顺序必须有实测或厂家证据。
+- 先写清楚数学定义，例如 `q_model = S · q_ctrl + b`，以及反向命令转换 `q_ctrl_cmd = S⁻¹ · (q_model_cmd - b)`；对角符号矩阵 S、零位偏置 b、关节顺序必须有实测或厂家证据。
 - **同一方向差异只能在一个明确边界处理一次。** 若通过 URDF axis 重新定义模型正方向并保持控制器数值语义不变，就不能再在 Bridge 对同一轴重复取反；若选择 Bridge 坐标转换，则反馈和命令必须成对、互逆地转换。
 - 不允许“URDF axis 翻一次 + Bridge command 再翻一次 + feedback 又翻一次”这种没有统一方程的叠加修改。
 - 若是轴置换、零位偏置、连杆尺寸、base / TCP 变换问题，不得仅靠 sign flip 处理。
-- 若使用 \`q_model = S q_ctrl + b\`，必须同步推导非对称限位的转换；不得把 lower / upper 原样复制后造成区间反转。
+- 若使用 `q_model = S q_ctrl + b`，必须同步推导非对称限位的转换；不得把 lower / upper 原样复制后造成区间反转。
 - 不修改右臂，除非右臂有独立测量证据和单独任务授权。
 
 **执行步骤**
@@ -266,7 +266,7 @@
 2. 先确认 T35 后 URDF / 控制器关节坐标转换有效。若 URDF 与真机仍存在结构性 FK 残差，只能做明确标注的局部补偿实验，不得宣称全工作空间正确。
 3. 操作员在场，左臂单臂录制；一次只做一个平移方向，手腕姿态尽量保持不变。
 4. 录制 +X、-X、+Y、-Y、+Z、-Z 六段，动作慢、匀速、小范围；每段前后松开离合并留停顿。
-5. 用 \`sixdir_calib.py segment\` 检查分段；用 \`fit --mode measured\` 诊断当前方向；经操作员确认期望方向后再用 \`fit --mode desired\` 生成候选标定文件。
+5. 用 `sixdir_calib.py segment` 检查分段；用 `fit --mode measured` 诊断当前方向；经操作员确认期望方向后再用 `fit --mode desired` 生成候选标定文件。
 6. 初始 position_scale 可从 0.30 作为低倍率候选，但不得把它当成已验证最优值；候选文件先离线验证，不自动加载到现场。
 7. 右臂只录一份独立 baseline 用于比较；不能把右臂标定矩阵复制给左臂。
 
@@ -275,7 +275,7 @@
 - 六个方向均被正确分段；正负方向结果对称且可重复。
 - 目标主轴方向正确，非主轴泄漏有量化数据；沿用当前项目门限时最大横向泄漏 <3mm。
 - 候选 map 的拟合残差和样本数量完整记录。
-- 用独立新录制包运行 \`verify\`；达到文档定义的误差门限才标 PASS。
+- 用独立新录制包运行 `verify`；达到文档定义的误差门限才标 PASS。
 - 标定 JSON 必须记录日期、side、样本包名、URDF hash、映射矩阵、scale、拟合残差；未验收文件不得成为默认配置。
 
 ### T37 姿态映射与低倍率端到端验收
@@ -289,10 +289,10 @@
 
 1. 平移验收前不做姿态标定；本任务开始时先核对当前 orientation_map / orientation_scale / ee_orientation_cost 的运行态值。
 2. 一次只转一个外骨骼姿态轴，先做小角度正向，再反向；记录 exo 旋转向量、robot TCP 旋转向量和轴间耦合。
-3. 使用 T29 的 \`ArmPoseMap\` 姿态换基逻辑；候选 orientation_scale=0.20 仅作为低倍率起点，必须由数据确认。
+3. 使用 T29 的 `ArmPoseMap` 姿态换基逻辑；候选 orientation_scale=0.20 仅作为低倍率起点，必须由数据确认。
 4. 每次加载标定文件都重启前备份配置，重启后检查日志确认实际加载文件、矩阵和 scale；不得只看文件内容。
 5. 先左臂单臂低倍率，再左臂平移 + 姿态组合；右臂保持不动。右臂对照测试另行批准。
-6. 验收期间保持现有 \`auto_enable=false\` 安全策略；不改 \`move_speed\`、不远程使能、不绕过控制器故障。
+6. 验收期间保持现有 `auto_enable=false` 安全策略；不改 `move_speed`、不远程使能、不绕过控制器故障。
 7. 若临时调整 bridge step limit / 跟随参数，必须记录旧值、新值、修改命令和恢复命令；未经批准不得固化到代码。
 
 **验收**
@@ -312,9 +312,9 @@
 
 **执行步骤**
 
-1. 更新 \`TASKS.md\` 中 T29～T38 状态、依赖和证据链接；DONE 必须附可复核证据，未验证保持 TODO / BLOCKED。
-2. 在 \`WORKLOG.md\` 追加最终摘要，不覆盖历史条目。
-3. 更新 \`HANDOFF.md\` 的当前结论和下一步；历史推测不得直接删除，推翻时说明证据。
+1. 更新 `TASKS.md` 中 T29～T38 状态、依赖和证据链接；DONE 必须附可复核证据，未验证保持 TODO / BLOCKED。
+2. 在 `WORKLOG.md` 追加最终摘要，不覆盖历史条目。
+3. 更新 `HANDOFF.md` 的当前结论和下一步；历史推测不得直接删除，推翻时说明证据。
 4. 将已验证的坐标系契约、关节转换表、标定 JSON 的版本 / hash、验收数据写入文档。
 5. 总结哪些修复是模型层、输入映射层、Bridge 层，避免后续 AI 重复叠加补偿。
 
@@ -326,17 +326,17 @@
 
 ## 3. AI 领取与协作规则
 
-1. 开始前必须阅读 \`AGENTS.md\`、\`TASKS.md\`、本文，以及 \`docs/机器人现场调试手册.md\`；先检查目标任务是否仍为 TODO、依赖是否完成。
-2. 认领任务时，把 \`TASKS.md\` 对应任务状态改为 DOING，并记录 AI 标识 / 日期；若已被其他 AI 标为 DOING，不得重复领取。
-3. 每个 AI 使用独立分支，建议命名 \`ai/T31-frame-audit\`、\`ai/T33-probe-hardening\`；从最新 main 开始，完成后提交 PR，不直接向 main 推送。
+1. 开始前必须阅读 `AGENTS.md`、`TASKS.md`、本文，以及 `docs/机器人现场调试手册.md`；先检查目标任务是否仍为 TODO、依赖是否完成。
+2. 认领任务时，把 `TASKS.md` 对应任务状态改为 DOING，并记录 AI 标识 / 日期；若已被其他 AI 标为 DOING，不得重复领取。
+3. 每个 AI 使用独立分支，建议命名 `ai/T31-frame-audit`、`ai/T33-probe-hardening`；从最新 main 开始，完成后提交 PR，不直接向 main 推送。
 4. 一个任务一个负责人；并行任务不得同时改同一份源码。若确实需要共享文件，先拆分接口或由任务负责人协调。
-5. \`TASKS.md\` 是任务状态唯一权威；\`WORKLOG.md\` 只追加；\`HANDOFF.md\` 只维护背景 / 当前结论，不写流水。
+5. `TASKS.md` 是任务状态唯一权威；`WORKLOG.md` 只追加；`HANDOFF.md` 只维护背景 / 当前结论，不写流水。
 6. 每次实验按调试手册 §4.1 记录“假设、最小修改、预期、判据、回退”；失败实验也要记录，不能删掉。
 7. 先做离线测试和静态检查，再申请现场窗口。未获操作员明确授权，不得连接控制器、发送运动命令、启动探针或更改运行参数。
 8. 只要证据不足，就写“未验证 / BLOCKED”；禁止把推测包装成根因。
 9. 不新增依赖，不改无关模块，不做大规模重构；每个 PR 只包含当前任务所需的最小变更。
 10. 不提交密码、token、SSH 凭据、控制器凭据、现场私有日志或未脱敏数据。发现仓库中已有敏感信息时，不要复制扩散，先报告维护者。
-11. 不允许 AI 自行清故障、远程 enable、改 \`auto_enable\`、改 \`move_speed\`、刷固件或跳过安全门禁。
+11. 不允许 AI 自行清故障、远程 enable、改 `auto_enable`、改 `move_speed`、刷固件或跳过安全门禁。
 12. 任务结束时在 PR 描述中写：修改文件、执行命令、测试结果、关键原始证据、未验证项、现场是否有变更、回退方式。
 
 ## 4. 真机安全红线
