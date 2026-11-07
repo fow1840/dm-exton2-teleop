@@ -1488,3 +1488,16 @@ average rate: 250.762
 - 未验证：无（纯文档/模板变更）
 - 下一步：无（等 PR #14 评审与真机窗口）
 - 现场变更：无（未触 tc/.60/任何现场进程）
+
+## 2026-11-07 17:4x | 协作流程补丁：接手流程第0步「先 fetch 重读远端台账」 | ZCode
+
+- 动作：把本次撞号教训固化为流程规则，落两处：① 模板库 AGENTS.md 接手流程新增第 0 步
+  （模板库提交 `a7d858a`，新项目自动带入）；② 本仓 AGENTS.md 同版修订，独立分支
+  `workflow-fetch-first` 提 PR（不动 T39 分支，保持 PR 原子性）。
+- 证据：PR https://github.com/fow1840/dm-exton2-teleop/pull/15 ；规则内容=接手先
+  `git fetch origin` + 重读远端 AGENTS/TASKS/HANDOFF，领取以远端 Issue 区+TASKS 为准，
+  附 T31→T39 撞号实例（fetch 十秒钟，撞号半小时）。
+- 结论：多 AI 协作闭环（Issue 信号旗 + [CLAIM] 抢占 + 分支 PR + 合并者解锁下游）补上
+  「过期本地副本」这道缝隙。
+- 未验证：PR #15 待评审合并
+- 现场变更：无（未触 tc/.60/任何现场进程）
