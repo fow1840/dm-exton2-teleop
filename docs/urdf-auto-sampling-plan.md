@@ -62,7 +62,7 @@ python3 tools/tests/test_urdf_axis_probe.py -v
 python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py /path/to/robot.urdf left --plan /path/to/plan.json
 ~~~
 
-计划 JSON 由现场人员核对。关节角和角度容差均为 rad，时间均为秒。
+计划 JSON 由现场人员核对。关节角和角度容差均为 rad，时间均为秒。当前探针只接受 base_link 与所选臂对应的 Link7 / Link7L 模型帧；其他基座或 TCP 帧必须先完成明确的模型 / 工具变换适配，不能只修改计划字段绕过。
 
 | 字段 | 要求 |
 |---|---|
