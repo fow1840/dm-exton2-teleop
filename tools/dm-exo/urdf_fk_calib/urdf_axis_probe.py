@@ -115,6 +115,8 @@ class Plan:
         plan = cls(**fields)
         if plan.side not in SIDES or type(plan.joint) is not int or not 1 <= plan.joint <= 7:
             raise ProbeError("select one arm and a joint number from 1 to 7")
+        if plan.base_frame != "base_link" or plan.tcp_frame != SIDES[plan.side][2]:
+            raise ProbeError("this probe requires base_link and the selected arm's Link7 frame")
         if type(plan.port) is not int or not 1 <= plan.port <= 65535:
             raise ProbeError("invalid controller port")
         for name in ("host", "base_frame", "tcp_frame"):
