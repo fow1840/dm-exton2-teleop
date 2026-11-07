@@ -204,3 +204,41 @@ J7 在限位外时控制器是否拒绝 movej 未验证；若 5Hz 后仍偶发�
 4. 【验证】补验修复 #2、#3（旧锚点 / 滤波器陈旧），目前没有独立验证记录
 5. 【可选】J7 回中位；probe 重启带上离合通道；canfd 模式评估
 6. 【排查】ik_node 无日志挂死（§五）根因未查，若复现优先处理
+
+
+---
+
+## 十、左臂方向异常专项：GitHub Issues 领取入口
+
+任务总说明：[docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)
+
+任务台账：[TASKS.md](./TASKS.md)（唯一权威状态）；GitHub Issues 用于领取、讨论、依赖交叉引用和 PR 关联。
+
+| 任务 | Issue | 初始状态 |
+|---|---|---|
+| T31 运行态参数与坐标系契约审计 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) | \`status:ready\` |
+| T32 左右臂 URDF / CSV 运动学离线对账 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) | \`status:ready\` |
+| T33 T30 真机探针安全加固与离线测试 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) | \`status:ready\` |
+| T34 左臂逐关节真机方向探针 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) | \`status:blocked\` |
+| T35 统一关节坐标转换契约与最小修正 | [#6](https://github.com/fow1840/dm-exton2-teleop/issues/6) | \`status:blocked\` |
+| T36 左臂末端平移六方向标定 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) | \`status:blocked\` |
+| T37 姿态映射与低倍率端到端验收 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) | \`status:blocked\` |
+| T38 结案与交接资料更新 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) | \`status:blocked\` |
+
+### AI 领取步骤
+
+1. 拉取最新 \`main\`，阅读 \`AGENTS.md\`、\`TASKS.md\`、专项任务包和对应 Issue。
+2. 仅领取 \`status:ready\` 且依赖满足的 Issue；当前第一批为 T31 / T32 / T33。
+3. 在 Issue 评论写 \`[CLAIM] AI 标识 / 日期时间\`；检查是否已有 Assignee 或其他 AI 认领。权限允许时设置 Assignee。
+4. 认领成功后把 Issue 标签改为 \`status:in-progress\`，并在 \`TASKS.md\` 将对应状态改为 \`DOING\`。
+5. 创建独立分支，完成后提交关联 Issue 的 PR；审核合并前不得把任务标记为 DONE。
+6. 真机任务没有现场操作员明确授权时保持 BLOCKED，不得连接控制器或发送运动命令。
+
+### 状态约定
+
+- \`status:ready\`：依赖已满足，可领取。
+- \`status:in-progress\`：已由某个 AI 认领并执行。
+- \`status:blocked\`：依赖、人工授权或硬件条件未满足。
+- \`status:review\`：已提交 PR，等待审核。
+
+若 GitHub Issue 标签与 \`TASKS.md\` 不一致，以 \`TASKS.md\` 为准，并及时修正 Issue 标签。
