@@ -1369,3 +1369,11 @@ average rate: 250.762
 - 未验证：GitHub Issues 的依赖目前以正文中的 #Issue 交叉引用表达，未建立 GitHub 原生 blocked-by 关系；未进行任何代码测试或真机实验。
 - 下一步：分配不同 AI 分别领取 #2、#3、#4；后续任务待依赖完成后再开放。
 - 现场变更：无；仅 GitHub 文档、Issue、Label 元数据变更。未连接控制器、未重启现场进程、未修改 URDF / IK / Bridge 运行代码。
+
+## 2026-11-07 | T31 运行态坐标系审计准备 | Codex
+
+- 动作：对照 IK、Puppetry 交接、FK adapter 和 Bridge，整理六话题的坐标系契约及只读采集脚本。
+- 证据：IK target_cb 读取 pose 和 header.stamp，未读取 frame_id 或执行 TF 变换。采集脚本通过 bash -n 和模拟 ROS 2 CLI 测试，共验证 53 次只读调用，保留空 frame_id、超时与频率输出。详见 [T31 审计](./docs/T31运行态与坐标系审计.md)。
+- 当前阻塞：本环境 command -v ros2 无输出，已配置现场隧道的本地入口连接返回 ConnectionRefusedError（errno 111）。未获得现场 ROS 参数、话题样本和频率。
+- 下一步：在现场授权的 ROS 会话运行脚本，并核对当前进程的 pose_map 日志及左右 target 实际 frame。
+- 现场变更：无。
