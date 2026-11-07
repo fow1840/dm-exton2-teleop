@@ -1395,3 +1395,10 @@ average rate: 250.762
 - 证据：GitHub Actions run 42385710843（T31 read-only audit tests）结论 success；job t31-offline 的 fake ROS CLI 测试、bash -n 和 git diff --check 均为 success。
 - 结论：T31 采集脚本的离线命令集合与输出权限测试通过。此结果不包含现场 ROS graph、真实 frame_id、运行参数或控制器数据，T31 仍等待现场采集。
 - 现场变更：无。
+
+## 2026-11-07 | T31 修正 Python 节点进程匹配并回归通过 | GPT-6
+
+- 修改：进程匹配规则兼容 MessageBridge / Puppetry / IK / FK Python 脚本的 .py 后缀；fake pgrep 测试断言关键 IK、FK、Bridge 名称均在匹配规则中。
+- 证据：GitHub Actions run 42387579256，job t31-offline success；3 项测试全部 OK，bash -n 与 git diff --check 成功。
+- 未验证：现场真实进程命令行、PID 与 ROS 节点归属仍需 T31 现场采集确认。
+- 现场变更：无。
