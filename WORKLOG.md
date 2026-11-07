@@ -1354,3 +1354,18 @@ average rate: 250.762
 - 证据：专项任务包、任务台账与接手规则已在分支 `docs/left-arm-direction-task-pack` 提交；详细任务验收条件见专项任务包。
 - 未验证：任务尚未由其他 AI 领取执行；未进行真机实验；未修改 URDF / IK / Bridge 运行代码。
 - 现场变更：无；仅提交 GitHub 文档与任务台账变更。
+
+
+## 2026-11-07 10:45 +08:00 | T31～T38 GitHub Issues 任务管理体系建立 | AI
+
+- 动作：审核并合并 PR #1；修复任务包中的 Markdown 反引号格式和 T33 控制器端点格式；创建 T31～T38 对应 GitHub Issues；复用仓库已有 Labels；将 Issue 链接和领取流程同步到 TASKS.md、AGENTS.md、HANDOFF.md 及专项任务包。
+- 证据：
+  - PR #1 已合并：\`https://github.com/fow1840/dm-exton2-teleop/pull/1\`；merge commit \`7bfa30f3a3709a81602533a5695b9a25708edb02\`
+  - Issues：T31 #2、T32 #3、T33 #4、T34 #5、T35 #6、T36 #7、T37 #8、T38 #9（均已创建并保持 OPEN）。
+  - 可领取：#2/#3/#4 均为 \`status:ready\`；阻塞：#5～#9 均为 \`status:blocked\`。
+  - Labels 已复用并成功应用：\`priority:P0/P1/P2\`、\`status:ready/blocked\`、\`type:offline/code/hardware/documentation\`。
+  - TASKS.md 已加入 Issue 链接；T31～T33 为 TODO，T34～T38 为 BLOCKED。
+- 结论：GitHub 任务入口和第一批可领取任务已建立；AI 领取规则已写入 AGENTS.md / 专项任务包 / HANDOFF.md。
+- 未验证：GitHub Issues 的依赖目前以正文中的 #Issue 交叉引用表达，未建立 GitHub 原生 blocked-by 关系；未进行任何代码测试或真机实验。
+- 下一步：分配不同 AI 分别领取 #2、#3、#4；后续任务待依赖完成后再开放。
+- 现场变更：无；仅 GitHub 文档、Issue、Label 元数据变更。未连接控制器、未重启现场进程、未修改 URDF / IK / Bridge 运行代码。
