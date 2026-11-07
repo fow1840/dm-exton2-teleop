@@ -499,6 +499,8 @@ def main(argv=None):
         if args.inspect_controller:
             if args.plan or not args.host or args.port is None or not 1 <= args.port <= 65535:
                 raise ProbeError("--inspect-controller requires --host and --port; do not pass --plan")
+            if args.output and args.output.exists():
+                raise ProbeError("inspection output must be a new file")
             timeout_s = number(args.rpc_timeout_s, "RPC timeout")
             if timeout_s <= 0:
                 raise ProbeError("RPC timeout must be positive")
@@ -508,6 +510,8 @@ def main(argv=None):
                 report = inspect_controller(ctrl, args.host, args.port)
             finally:
                 ctrl.close()
+            report["urdf_path"] = str(args.urdf)
+            report["urdf_sha256"] = hashlib.sha256(urdf_bytes).hexdigest()
             rendered = json.dumps(report, indent=2, allow_nan=False)
             if args.output:
                 with args.output.open("x", encoding="utf-8") as output:
