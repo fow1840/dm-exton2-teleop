@@ -1369,3 +1369,10 @@ average rate: 250.762
 - 未验证：GitHub Issues 的依赖目前以正文中的 #Issue 交叉引用表达，未建立 GitHub 原生 blocked-by 关系；未进行任何代码测试或真机实验。
 - 下一步：分配不同 AI 分别领取 #2、#3、#4；后续任务待依赖完成后再开放。
 - 现场变更：无；仅 GitHub 文档、Issue、Label 元数据变更。未连接控制器、未重启现场进程、未修改 URDF / IK / Bridge 运行代码。
+
+## 2026-11-07 | 确立 URDF 校准自动采样顺序 | Codex
+
+- 动作：整理厂家关节接口自动摆位与停稳采样方案。T33 为首要 P0 实现任务，T34 为首个 P0 真机任务，保留依赖和现场批准条件。
+- 证据：[自动采样方案](./docs/urdf-auto-sampling-plan.md)、[T33 #4](https://github.com/fow1840/dm-exton2-teleop/issues/4)、[T34 #5](https://github.com/fow1840/dm-exton2-teleop/issues/5)。
+- 下一步：T33 离线验证通过后，按 T34 先采左臂单关节的基准、正向、回基准、反向、回基准五点数据。
+- 现场变更：无。本条记录范围为方案与任务优先级，真机自动采样待验证。
