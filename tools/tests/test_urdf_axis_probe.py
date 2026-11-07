@@ -252,19 +252,21 @@ class WireTests(unittest.TestCase):
             plan_file.write_text(json.dumps(probe.asdict(cfg)), encoding="utf-8")
             output_file = Path(temp) / "probe.jsonl"
             fingerprint = hashlib.sha256(
-                plan_file.read_bytes() + b"\\0" + URDF.read_bytes()
+                plan_file.read_bytes() + bytes([0]) + URDF.read_bytes()
             ).hexdigest()
             fake_stdin = Mock()
             fake_stdin.isatty.return_value = True
-            with patch.object(probe.sys, "stdin", fake_stdin), \\
-                    patch("builtins.input", return_value=f"RUN {fingerprint}"), \\
-                    patch.object(probe.socket, "create_connection",
-                                 side_effect=OSError("controller already has an owner")), \\
-                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                result = probe.main([
+            with patch.object(probe.sys, "stdin", fake_stdin):
+                with patch("builtins.input", return_value=f"RUN {fingerprint}"):
+                    with patch.object(
+                        probe.socket, "create_connection",
+                        side_effect=OSError("controller already has an owner"),
+                    ):
+                        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                            result = probe.main([
                     str(URDF), "left", "--plan", str(plan_file),
-                    "--execute", "--output", str(output_file),
-                ])
+                                "--execute", "--output", str(output_file),
+                            ])
             self.assertEqual(result, 1)
             records = [json.loads(line) for line in output_file.read_text().splitlines()]
             self.assertEqual(records[-1]["type"], "aborted")
