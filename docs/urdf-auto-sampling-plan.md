@@ -107,7 +107,7 @@ python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py \
 注意：
 
 - 这是**只读网络连接**，不是零连接；当前型号 TCP 30485 为单连接。执行前仍须由现场人员确认 T3 Bridge、示教 GUI 和其他客户端已释放连接。不能与遥操作同时运行。
-- 输出文件必须是新文件；内容包含四类原始响应、主机请求/接收时间和本次 URDF SHA256。目录应保存在现场私有位置，公开 GitHub 只放脱敏摘要。
+- 输出文件必须是新文件；内容包含四类原始响应、主机请求/接收时间和本次 URDF SHA256。某一只读请求失败时仍会保存已取得的部分响应和失败命令，不会继续查询；目录应保存在现场私有位置，公开 GitHub 只放脱敏摘要。
 - 先核对 get_device_state 的真实字段和状态值；特别确认 state、motorErrorDetails 是否存在，以及 erroeCode / errorCode 的实际拼写。
 - 核对 get_config 的 lowerLimits / upperLimits 是否为 14 项、顺序是否确为左七轴再右七轴、单位是否为 rad。
 - 核对 get_joint_position 的 joint 是否为 17 项，顺序是否为腰、左七轴、右七轴、头两轴，单位是否为 rad，且数据确实来自实时反馈。
