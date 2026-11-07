@@ -1425,3 +1425,10 @@ average rate: 250.762
 - 证据：GitHub Actions run 42386529586，job t33-offline success；17 项测试全部 OK，包含 Pinocchio 2.7.0 FK 回放和只读预检部分响应保留；py_compile 与 git diff --check 成功。
 - 结论：T33 离线门禁进一步通过。仍未验证真实固件字段、反馈新鲜度、TCP 单连接切换和停止行为。
 - 现场变更：无。
+
+## 2026-11-07 | T33 计划坐标系门禁与最终离线回归 | GPT-6
+
+- 修改：Plan.from_json 现在只接受已验证的 base_link 和当前所选臂 Link7 / Link7L 帧，拒绝仅通过修改计划字段切换到未经验证的 base / TCP 帧；新增对应测试。
+- 证据：GitHub Actions run 42387029702，job t33-offline success；18 项测试全部 OK，含 Pinocchio 2.7.0 FK 回放、左右臂五点模拟、故障响应、只读预检部分证据和坐标系计划门禁；py_compile 与 git diff --check 成功。
+- 未验证：厂家 V0.3 运动中 state 状态值、movej 回执语义、反馈新鲜度、stop_motion 真实行为。若运动期间 state 返回 moving/busy，需先按正式状态机契约适配代码，不得放宽白名单。
+- 现场变更：无。
