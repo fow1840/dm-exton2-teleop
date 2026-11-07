@@ -1393,3 +1393,13 @@ average rate: 250.762
 - 未验证：现场固件是否实际返回 `state` 和 `motorErrorDetails`；V0.3 未定义设备侧采样时间戳/序号，因此主机接收时间不能证明反馈源新鲜；现场 MoveJ、保持值、回执及停止行为仍由 T34 在操作员批准后验证。
 - 现场变更：无。未连接控制器、未发送运动命令、未修改现场 URDF / Bridge / ROS 参数。
 
+
+
+## 2026-11-07 | T33 安全审查补强：控制器拒绝响应 fail-closed | GPT-6
+
+- 假设：`movej` 或 `get_device_state` 显式返回非成功状态 / 错配响应时，控制器当前状态不能安全推断；继续自动发送 `stop_motion` 可能绕过现场 fault 处置流程。
+- 修改：`tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py` 中将上述响应归为 `ControllerStateError`，沿用现有故障分支，不再追加 `stop_motion`；新增模拟测试覆盖显式拒绝、状态查询失败和错配状态响应。
+- 证据：提交 `bf47f5aa9238b622a972bd7fa31ad7783735fafa`（探针）；`28f467ff7dcf4967933481001a674c6aae2e54a8`（测试）；`487e0bc5bbe750c4aa3558a41569897b80b61203`（方案文档）；`bf10d4147883f9fb6b70e44c2cdef13c59b49b9c`（离线 CI workflow）。
+- 测试：新增回归用例；本次尚未在本地运行。GitHub Actions workflow 已加入，等待实际运行结果，不将其记作 PASS。
+- 未验证：真实固件对 `get_device_state` / `movej` 的回执字段、状态值和停止行为；必须由 T34 现场核对。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改现场文件或参数。
