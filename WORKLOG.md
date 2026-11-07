@@ -1412,3 +1412,9 @@ average rate: 250.762
 - 证据：探针提交 83b0c4c8e82df32d618543f6ea1b1cfa65614d33、83e9398f6719292be629464a209d568bbcda6532、7772d54003ddcb4d16ca5f882b99962ef81199b1；测试提交 b5bf5450947fbdbc57aad3c2785db586d90b9bbf；方案文档提交 0deaac9af5246bb8056f4fef80849de0af37f3c3、01bdf780eb88837c3794e390d6701bff2c843bd1。
 - 未验证：现场固件对四类查询的响应字段、TCP 单连接切换、反馈新鲜度和 stop_motion 实际语义。
 - 现场变更：无。未连接控制器、未发送运动命令、未修改现场参数或 URDF。
+
+## 2026-11-07 | T33 离线 CI 完整通过（含 Pinocchio 2.7.0） | GPT-6
+
+- 证据：GitHub Actions run 42386074029，job t33-offline 结论 success；Pinocchio 2.7.0 安装成功；16 项测试全部 OK，包含左右臂 Pinocchio FK 回放；py_compile 与 git diff --check 均成功。
+- 结论：T33 当前分支的模拟控制器、故障门禁、只读预检和运动学离线回放通过 CI。该结果不代表现场 V0.3 回执、真实反馈新鲜度、stop_motion 或任何真机运动已验证。
+- 现场变更：无。
