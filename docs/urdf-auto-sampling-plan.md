@@ -98,7 +98,7 @@ T34 运动前，先使用探针的只读检查模式核对当前固件响应。�
 python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py \
   /path/to/robot.urdf \
   --inspect-controller \
-  --host <现场控制器地址> \
+  --host YOUR_CONTROLLER_IP \
   --port 30485 \
   --rpc-timeout-s 1.0 \
   --output /path/to/private-capture/controller-preflight.json
