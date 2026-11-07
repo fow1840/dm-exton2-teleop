@@ -264,7 +264,7 @@ class WireTests(unittest.TestCase):
                     ):
                         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                             result = probe.main([
-                    str(URDF), "left", "--plan", str(plan_file),
+                                str(URDF), "left", "--plan", str(plan_file),
                                 "--execute", "--output", str(output_file),
                             ])
             self.assertEqual(result, 1)
