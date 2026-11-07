@@ -511,7 +511,7 @@ def main(argv=None):
             rendered = json.dumps(report, indent=2, allow_nan=False)
             if args.output:
                 with args.output.open("x", encoding="utf-8") as output:
-                    output.write(rendered + "\\n")
+                    output.write(rendered + "\n")
             else:
                 print(rendered)
             return 0
