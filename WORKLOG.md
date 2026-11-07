@@ -1383,3 +1383,13 @@ average rate: 250.762
 - 证据：`test_urdf_axis_probe.py` 9 项通过（Pinocchio 2.7.0，含左右臂方向回放）；`test_bridge_offline.py` 21 项通过；`test_master_slave_map.py` 15 项通过；`git diff --check` 通过。
 - 未验证：现场固件的 MoveJ、保持值、反馈时效和停止行为。T33 离线已验证，等待 PR 审核。T34 继续按 T31、T32、T33 的前置条件和现场批准执行。
 - 现场变更：无。
+
+## 2026-11-07 | T33 PR #11 安全审查修复 | GPT-6
+
+- 动作：接续既有 `codex/t33-auto-sampling` 分支与 PR #11。按 Issue #4 逐项复核控制器状态门禁、异常停止、左右 TCP 数据段和反馈新鲜度边界。修复 `get_device_state` 的 fail-closed 校验：显式要求 `state`、`hardwareErrors`、`softwareErrors`、`motorErrorDetails` 及协议错误码；控制器状态故障或响应不完整时，不再盲目发送 `stop_motion`，而是记录跳过原因并交由现场操作员处置。新增缺失状态字段、运动后故障、冻结反馈和控制器连接冲突测试；强化左右臂 TCP 四元数段断言。
+- 证据：`docs/机械臂通信协议说明_V0.3_梳理.md` 明确 `pose[14]` 为左 TCP 7D + 右 TCP 7D，顺序为 `(x,y,z,qw,qx,qy,qz)`；同一协议梳理只列出 `erroeCode`、`hardwareErrors`、`softwareErrors`，没有定义 `state` / `motorErrorDetails`。因此执行入口对这两个字段缺失采取 fail-closed，而不是把缺失当作无故障。
+- 修改文件：`tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py`、`tools/tests/test_urdf_axis_probe.py`、`docs/urdf-auto-sampling-plan.md`、`TASKS.md`。
+- 验证：新增离线测试已写入；本轮未在当前执行环境运行测试，不能记录为通过。测试命令：`python3 tools/tests/test_urdf_axis_probe.py -v`。后续应在仓库的 Pink/Pinocchio 环境执行，并核对全部结果。
+- 未验证：现场固件是否实际返回 `state` 和 `motorErrorDetails`；V0.3 未定义设备侧采样时间戳/序号，因此主机接收时间不能证明反馈源新鲜；现场 MoveJ、保持值、回执及停止行为仍由 T34 在操作员批准后验证。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改现场 URDF / Bridge / ROS 参数。
+
