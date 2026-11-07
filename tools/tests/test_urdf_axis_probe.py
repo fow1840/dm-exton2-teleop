@@ -322,6 +322,38 @@ class WireTests(unittest.TestCase):
         with self.assertRaises(probe.ControllerStateError):
             probe.Controller(sock, 1).request("get_device_state")
 
+    def test_read_only_inspection_uses_only_four_query_commands(self):
+        class ReadOnlyFake:
+            def __init__(self):
+                self.commands = []
+
+            def request(self, command):
+                self.commands.append(command)
+                return probe.Reply(
+                    {"command": command, "status": probe.SUCCESS, "payload": command},
+                    10.0, 10.01,
+                )
+
+        ctrl = ReadOnlyFake()
+        report = probe.inspect_controller(ctrl, "127.0.0.1", 30485)
+        self.assertEqual(
+            ctrl.commands,
+            ["get_device_state", "get_config", "get_joint_position", "get_tcp_pose"],
+        )
+        self.assertEqual(report["mode"], "read_only_controller_inspection")
+        self.assertEqual(report["host"], "127.0.0.1")
+        self.assertEqual(report["port"], 30485)
+        self.assertEqual(set(report["responses"]), set(ctrl.commands))
+        self.assertNotIn("movej", ctrl.commands)
+        self.assertNotIn("stop_motion", ctrl.commands)
+
+    def test_inspection_cli_requires_explicit_endpoint_without_connecting(self):
+        with patch.object(probe.socket, "create_connection") as connect, \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            result = probe.main([str(URDF), "--inspect-controller"])
+        self.assertEqual(result, 1)
+        connect.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
