@@ -88,3 +88,28 @@ T34 获批后才可在现场使用执行模式（须另传 `--execute --output`�
 - V0.3 没有设备侧采样时间戳或序号。探针记录主机发送/接收时间，并通过目标进度、停稳窗口和关节/TCP/关节配对检查拒绝未产生预期进度的冻结反馈；但主机接收时间**不能证明设备数据源新鲜**，也无法排除“旧缓存恰好等于目标值”。T34 必须现场核实反馈更新机制/时间戳；未核实前不得宣称 stale feedback 已被完全证明可检出。
 
 离线方向分析使用仓库的 Pink/Pinocchio 环境。基座和 TCP 定义核对后，可以用 `--analyze 记录.jsonl --frames-verified --min-rotation-rad 阈值` 用记录中的同一份 URDF 读取完整的五点记录。正反向结果要同向支持同一个判定，混合结果或信号不足记为 `UNCERTAIN`。
+
+
+## 真机到位前的只读控制器预检
+
+T34 运动前，先使用探针的只读检查模式核对当前固件响应。它只依次发送 get_device_state、get_config、get_joint_position、get_tcp_pose，不发送 movej、stop_motion，也不执行使能或故障复位。
+
+~~~bash
+python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py \
+  /path/to/robot.urdf \
+  --inspect-controller \
+  --host <现场控制器地址> \
+  --port 30485 \
+  --rpc-timeout-s 1.0 \
+  --output /path/to/private-capture/controller-preflight.json
+~~~
+
+注意：
+
+- 这是**只读网络连接**，不是零连接；当前型号 TCP 30485 为单连接。执行前仍须由现场人员确认 T3 Bridge、示教 GUI 和其他客户端已释放连接。不能与遥操作同时运行。
+- 输出文件必须是新文件；内容包含四类原始响应、主机请求/接收时间和本次 URDF SHA256。目录应保存在现场私有位置，公开 GitHub 只放脱敏摘要。
+- 先核对 get_device_state 的真实字段和状态值；特别确认 state、motorErrorDetails 是否存在，以及 erroeCode / errorCode 的实际拼写。
+- 核对 get_config 的 lowerLimits / upperLimits 是否为 14 项、顺序是否确为左七轴再右七轴、单位是否为 rad。
+- 核对 get_joint_position 的 joint 是否为 17 项，顺序是否为腰、左七轴、右七轴、头两轴，单位是否为 rad，且数据确实来自实时反馈。
+- 核对 get_tcp_pose 的 pose 是否为 14 项、左右臂顺序和四元数顺序是否与 V0.3 文档一致，并确认基座、工具帧和位置单位。
+- 该模式只保存原始响应，不替现场人员判断字段语义。任一结构不符、状态异常或反馈来源不明，保持 T34 BLOCKED；不得为通过检查而放宽执行模式的 fail-closed 校验。
