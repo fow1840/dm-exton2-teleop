@@ -614,7 +614,7 @@
 | 编号 | 任务 | 优先级 | 状态 | 依赖 | 执行类型 | GitHub Issue |
 |---|---|---:|---|---|---|---|
 | T31 | 运行态参数与坐标系契约审计 | P0 | TODO | 无 | 只读 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) |
-| T32 | 左右臂 URDF / CSV 运动学离线对账 | P0 | TODO | 无 | 离线只读 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) |
+| T32 | [左右臂 URDF / CSV 运动学离线对账](./docs/URDF左右臂关节轴离线审计.md) | P0 | DOING（Codex，离线对账完成，待 PR 审核） | 无 | 离线只读 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) |
 | T33 | T30 真机方向探针安全加固与离线测试 | P0 | TODO | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
 | T34 | 左臂逐关节真机方向探针 | P0 | BLOCKED | T31、T33；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
 | T35 | 统一关节坐标转换契约并实施最小修正 | P0 | BLOCKED | T32、T34 | 代码 / 模型，部署另批 | [#6](https://github.com/fow1840/dm-exton2-teleop/issues/6) |
