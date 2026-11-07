@@ -1418,3 +1418,10 @@ average rate: 250.762
 - 证据：GitHub Actions run 42386074029，job t33-offline 结论 success；Pinocchio 2.7.0 安装成功；16 项测试全部 OK，包含左右臂 Pinocchio FK 回放；py_compile 与 git diff --check 均成功。
 - 结论：T33 当前分支的模拟控制器、故障门禁、只读预检和运动学离线回放通过 CI。该结果不代表现场 V0.3 回执、真实反馈新鲜度、stop_motion 或任何真机运动已验证。
 - 现场变更：无。
+
+## 2026-11-07 | T33 只读预检部分证据保留回归通过 | GPT-6
+
+- 修改：只读预检遇到任一查询失败时，保存此前成功的原始响应、失败命令和错误；状态 / 运动请求的错配或显式失败响应保留原始回执，不追加运动控制命令。
+- 证据：GitHub Actions run 42386529586，job t33-offline success；17 项测试全部 OK，包含 Pinocchio 2.7.0 FK 回放和只读预检部分响应保留；py_compile 与 git diff --check 成功。
+- 结论：T33 离线门禁进一步通过。仍未验证真实固件字段、反馈新鲜度、TCP 单连接切换和停止行为。
+- 现场变更：无。
