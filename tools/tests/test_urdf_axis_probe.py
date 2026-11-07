@@ -354,6 +354,34 @@ class WireTests(unittest.TestCase):
         self.assertEqual(result, 1)
         connect.assert_not_called()
 
+    def test_read_only_inspection_preserves_partial_raw_response_on_failure(self):
+        class FailingReadOnlyFake:
+            def __init__(self):
+                self.commands = []
+
+            def request(self, command):
+                self.commands.append(command)
+                if command == "get_config":
+                    raise probe.ControllerStateError(
+                        "get_config failed", raw={"command": command, "status": "fault"}
+                    )
+                return probe.Reply(
+                    {"command": command, "status": probe.SUCCESS},
+                    10.0, 10.01,
+                )
+
+        ctrl = FailingReadOnlyFake()
+        report = probe.inspect_controller(ctrl, "127.0.0.1", 30485)
+        self.assertFalse(report["complete"])
+        self.assertEqual(report["failure"]["command"], "get_config")
+        self.assertEqual(ctrl.commands, ["get_device_state", "get_config"])
+        self.assertEqual(
+            report["responses"]["get_config"]["raw"],
+            {"command": "get_config", "status": "fault"},
+        )
+        self.assertNotIn("movej", ctrl.commands)
+        self.assertNotIn("stop_motion", ctrl.commands)
+
 
 if __name__ == "__main__":
     unittest.main()
