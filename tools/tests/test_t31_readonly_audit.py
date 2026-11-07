@@ -22,6 +22,7 @@ class T31AuditScriptTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.call_log = self.root / "ros2-calls.txt"
+        self.pgrep_log = self.root / "pgrep-calls.txt"
 
         ros2 = self.bin / "ros2"
         ros2.write_text(
@@ -36,7 +37,11 @@ class T31AuditScriptTests(unittest.TestCase):
         ros2.chmod(0o755)
 
         pgrep = self.bin / "pgrep"
-        pgrep.write_text("#!/usr/bin/env bash\nexit 1\n")
+        pgrep.write_text(
+            "#!/usr/bin/env bash\n"
+            'printf "%s\\\\n" "$*" >> "$T31_TEST_PGREP_LOG"\n'
+            "exit 1\n"
+        )
         pgrep.chmod(0o755)
 
         self.env = os.environ.copy()
@@ -45,6 +50,7 @@ class T31AuditScriptTests(unittest.TestCase):
             "ROS_DOMAIN_ID": "42",
             "ROS_DISTRO": "humble",
             "T31_TEST_CALL_LOG": str(self.call_log),
+            "T31_TEST_PGREP_LOG": str(self.pgrep_log),
             "T31_OBSERVATION": "clutch_released",
         })
 
@@ -85,6 +91,10 @@ class T31AuditScriptTests(unittest.TestCase):
         self.assertTrue(any("/target_robot/joint_commands" in call for call in calls))
         self.assertTrue(all("movej" not in call for call in calls))
         self.assertTrue(all("stop_motion" not in call for call in calls))
+        process_pattern = self.pgrep_log.read_text()
+        self.assertIn("ik_node([.]py)?", process_pattern)
+        self.assertIn("joint_to_pose_adapter([.]py)?", process_pattern)
+        self.assertIn("exton_bridge[.]py", process_pattern)
 
         status = (output / "status.tsv").read_text().splitlines()
         self.assertEqual(len(status), 54)  # header + 53 bounded reads
