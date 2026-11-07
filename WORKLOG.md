@@ -1389,3 +1389,9 @@ average rate: 250.762
 - 测试：新增 GitHub Actions workflow .github/workflows/t31-offline.yml；当前尚未取得实际 CI 运行结果，未宣称 PASS。
 - 未验证：现场 ROS_DOMAIN_ID、节点参数、六个话题运行态 frame / publisher / 频率、控制器真实协议字段和反馈新鲜度。
 - 现场变更：无。没有连接 ROS 现场、没有连接控制器、没有发送运动命令、没有改动 URDF / IK / Bridge 运行文件。
+
+## 2026-11-07 | T31 离线 CI 结果 | GPT-6
+
+- 证据：GitHub Actions run 42385710843（T31 read-only audit tests）结论 success；job t31-offline 的 fake ROS CLI 测试、bash -n 和 git diff --check 均为 success。
+- 结论：T31 采集脚本的离线命令集合与输出权限测试通过。此结果不包含现场 ROS graph、真实 frame_id、运行参数或控制器数据，T31 仍等待现场采集。
+- 现场变更：无。
