@@ -611,21 +611,22 @@
 
 > 本节是 T31～T38 的任务状态唯一入口。任务细节以专项任务包为准。状态初始均为 TODO；依赖未完成不得抢跑。
 
-| 编号 | 任务 | 优先级 | 状态 | 依赖 | 执行类型 |
-|---|---|---:|---|---|---|
-| T31 | 运行态参数与坐标系契约审计 | P0 | TODO | 无 | 只读 |
-| T32 | 左右臂 URDF / CSV 运动学离线对账 | P0 | TODO | 无 | 离线只读 |
-| T33 | T30 真机方向探针安全加固与离线测试 | P0 | TODO | 无 | 代码 / 离线 |
-| T34 | 左臂逐关节真机方向探针 | P0 | TODO | T31、T33；阅读 T32 | 真机，需操作员批准 |
-| T35 | 统一关节坐标转换契约并实施最小修正 | P0 | TODO | T32、T34 | 代码 / 模型，部署另批 |
-| T36 | 左臂末端平移六方向标定 | P1 | TODO | T31、T35；运动学门禁复核 | 录制 / 离线拟合 |
-| T37 | 姿态映射与低倍率端到端验收 | P1 | TODO | T36 PASS | 真机，需操作员批准 |
-| T38 | 结案与交接资料更新 | P2 | TODO | T31～T37 结论明确 | 文档 |
+| 编号 | 任务 | 优先级 | 状态 | 依赖 | 执行类型 | GitHub Issue |
+|---|---|---:|---|---|---|---|
+| T31 | 运行态参数与坐标系契约审计 | P0 | TODO | 无 | 只读 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) |
+| T32 | 左右臂 URDF / CSV 运动学离线对账 | P0 | TODO | 无 | 离线只读 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) |
+| T33 | T30 真机方向探针安全加固与离线测试 | P0 | TODO | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
+| T34 | 左臂逐关节真机方向探针 | P0 | BLOCKED | T31、T33；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
+| T35 | 统一关节坐标转换契约并实施最小修正 | P0 | BLOCKED | T32、T34 | 代码 / 模型，部署另批 | [#6](https://github.com/fow1840/dm-exton2-teleop/issues/6) |
+| T36 | 左臂末端平移六方向标定 | P1 | BLOCKED | T31、T35；运动学门禁复核 | 录制 / 离线拟合 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) |
+| T37 | 姿态映射与低倍率端到端验收 | P1 | BLOCKED | T36 PASS | 真机，需操作员批准 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) |
+| T38 | 结案与交接资料更新 | P2 | BLOCKED | T31～T37 结论明确 | 文档 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) |
 
 ### 任务领取规则
 
-- 一名 AI 负责一个任务；开始前先检查状态与依赖。
-- 认领时将状态改为 DOING，并写 AI 标识 / 日期；若已由其他 AI 认领，不得重复执行。
+- 一名 AI 负责一个任务；开始前先检查本表状态、对应 GitHub Issue 的 `status:*` 标签和依赖。
+- 领取 T31～T38 时，先在对应 Issue 评论中写 `[CLAIM] AI 标识 / 日期时间`；若已有 Assignee 或其他 AI 的有效认领，不得重复领取。权限允许时将自己设为 Assignee。
+- 认领成功后，将 Issue 标签改为 `status:in-progress`，并将本表状态改为 DOING、记录 AI 标识 / 日期。
 - 每个 AI 使用独立分支并提交 PR；不直接推 main。
 - T31 / T32 / T33 可并行；T34 起必须按依赖顺序执行。
 - 真机任务未经现场操作员明确批准一律 BLOCKED；不得自行清故障、enable、改速度或绕过安全门禁。
