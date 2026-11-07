@@ -1403,3 +1403,12 @@ average rate: 250.762
 - 测试：新增回归用例；本次尚未在本地运行。GitHub Actions workflow 已加入，等待实际运行结果，不将其记作 PASS。
 - 未验证：真实固件对 `get_device_state` / `movej` 的回执字段、状态值和停止行为；必须由 T34 现场核对。
 - 现场变更：无。未连接控制器、未发送运动命令、未修改现场文件或参数。
+
+## 2026-11-07 | T33 增加只读控制器预检并补齐故障回归 | GPT-6
+
+- 动作：增加 --inspect-controller 只读模式，依次读取 get_device_state、get_config、get_joint_position、get_tcp_pose，保存原始响应、主机请求/接收时间及 URDF SHA256；该模式不发送 movej / stop_motion、不使能、不复位。
+- 安全修正：get_device_state / movej 的显式非成功回执或错配响应改为 ControllerStateError，复用现有 fail-closed 分支，不再追加 stop_motion。普通传输异常仍保留原有停止尝试和现场人工接管要求。
+- 测试：新增模拟测试覆盖显式 movej 拒绝、状态查询失败、错配状态响应、只读预检仅发四类查询命令及 CLI 缺少 endpoint 时不连接。CI workflow 已加入；本轮尚未取得实际测试 / CI 结果，未宣称 PASS。
+- 证据：探针提交 83b0c4c8e82df32d618543f6ea1b1cfa65614d33、83e9398f6719292be629464a209d568bbcda6532、7772d54003ddcb4d16ca5f882b99962ef81199b1；测试提交 b5bf5450947fbdbc57aad3c2785db586d90b9bbf；方案文档提交 0deaac9af5246bb8056f4fef80849de0af37f3c3、01bdf780eb88837c3794e390d6701bff2c843bd1。
+- 未验证：现场固件对四类查询的响应字段、TCP 单连接切换、反馈新鲜度和 stop_motion 实际语义。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改现场参数或 URDF。
