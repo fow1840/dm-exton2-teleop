@@ -1453,3 +1453,20 @@ average rate: 250.762
   ——窗口内增量 LOO 直接检验，若 60 后 max 仍 >100mm 转「控制器≠标准 DH 链」嫌疑+厂商路线。
 - 下一步：等真机窗口（左臂优先）；窗口前把 sweep_calib.py 推 tc（先 diff+备份）。
 - 现场变更：无（未触 tc/.60/任何现场进程；纯本地离线计算与文档）
+
+## 2026-11-07 16:4x | T39 推云端：撞号改 T31→T39 + rebase + PR #14 | ZCode
+
+- 动作：① 推送时发现远端 main 已由并行会话建立 T31～T38 issue 工作流（左臂方向专项，
+  PR #1 已并入，#2~#9 开放）且本地 T31 与其撞号 → 本地未推送的自有提交改号 T31→T39
+  （TASKS/WORKLOG/采数方案/工具 docstring 共 7 文件，backup/pre-rename-t31 本地备份分支可回退）；
+  ② rebase 到 origin/main（WORKLOG/TASKS 两处 union 冲突解决，双侧条目均保留）；
+  ③ 按远端新领取规则（AGENTS：独立分支+PR，不直接推 main）推分支
+  `t39-urdf-dh-rebuild` 并开 PR；本地 main 复位到 origin/main。
+- 证据：PR https://github.com/fow1840/dm-exton2-teleop/pull/14 ；分支远端 HEAD 与本地一致；
+  rebase 后 git log：60370a5(远端) → 74234f5(模板库条目) → 03c8cfd(T39)；
+  改号后全仓 grep：本项目 T39 唯一，远端 §四 T31~T38 未动。
+- 结论：T39 离线成果已上云待评审合并；真机窗口执行清单见 docs/URDF数值重建采数方案.md §四。
+- 未验证：PR 未评审合并（按规则等人工/其他 AI 评审）；与 T33/T36 的工具复用尚未与领取人协调。
+- 下一步：① PR 合并后把 TASKS §四 之外补一行 T39 状态指针（或按评审意见调整归属）；
+  ② 等真机窗口：左臂 60 位姿采数 → 增量 LOO → DH 表交付。
+- 现场变更：无（未触 tc/.60/任何现场进程）
