@@ -31,6 +31,10 @@ class ProbeError(RuntimeError):
 class ControllerStateError(ProbeError):
     """Controller state is faulted or incomplete; do not issue recovery motion commands."""
 
+    def __init__(self, message, raw=None):
+        super().__init__(message)
+        self.raw = raw
+
 
 def number(value, label):
     if type(value) in (int, float):
@@ -190,16 +194,16 @@ class Controller:
                 # Do not issue another control command until an operator inspects it.
                 if command == "stop_motion":
                     continue
-                detail = f"unexpected reply while waiting for {command}"
+                detail = f"unexpected reply while waiting for {command}: {reply!r}"
                 if command in ("get_device_state", "movej"):
-                    raise ControllerStateError(detail)
+                    raise ControllerStateError(detail, raw=reply)
                 raise ProbeError(detail)
             if reply.get("status") != SUCCESS:
-                detail = f"{command} failed: {reply.get('status')!r}"
+                detail = f"{command} failed: {reply.get('status')!r}; response={reply!r}"
                 # An explicit motion rejection or failed state query is not a generic
                 # transport error. Avoid sending stop_motion into an unknown/faulted state.
                 if command in ("get_device_state", "movej"):
-                    raise ControllerStateError(detail)
+                    raise ControllerStateError(detail, raw=reply)
                 raise ProbeError(detail)
             return Reply(reply, sent, time.monotonic())
 
@@ -229,10 +233,20 @@ def check_device(reply):
 
 
 def inspect_controller(ctrl, host, port):
-    """Read the controller's raw preflight responses. Never sends a motion command."""
+    """Read controller preflight responses. Preserve partial evidence; never moves."""
     responses = {}
+    failure = None
     for command in ("get_device_state", "get_config", "get_joint_position", "get_tcp_pose"):
-        reply = ctrl.request(command)
+        try:
+            reply = ctrl.request(command)
+        except (Exception, KeyboardInterrupt) as exc:
+            item = {"error": str(exc)}
+            raw = getattr(exc, "raw", None)
+            if raw is not None:
+                item["raw"] = raw
+            responses[command] = item
+            failure = {"command": command, "error": str(exc)}
+            break
         responses[command] = {
             "sent_monotonic_s": reply.sent,
             "received_monotonic_s": reply.received,
@@ -243,6 +257,8 @@ def inspect_controller(ctrl, host, port):
         "host": host,
         "port": port,
         "timestamp_unix_s": time.time(),
+        "complete": failure is None,
+        "failure": failure,
         "responses": responses,
     }
 
@@ -518,7 +534,9 @@ def main(argv=None):
                     output.write(rendered + "\n")
             else:
                 print(rendered)
-            return 0
+            if not report["complete"]:
+                print("Read-only controller inspection incomplete; review the saved partial response.", file=sys.stderr)
+            return 0 if report["complete"] else 1
         plan = None
         if args.plan:
             plan_bytes = args.plan.read_bytes()
