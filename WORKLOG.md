@@ -1381,3 +1381,11 @@ average rate: 250.762
 ## 2026-11-07 | T31 确认现场采集路径 | Codex
 
 - 现场确认 SSH 隧道仅限局域网。由现场 ROS 主机或同一 ROS 2 网络内的主机运行只读采集脚本，再按授权渠道交接结果。T31 等待现场数据。
+
+## 2026-11-07 | T31 离线采集回归与真机到位准备清单 | GPT-6
+
+- 动作：新增 fake ROS CLI 测试，验证只读采集脚本的命令集合、边界条件和输出权限；新增统一的真机到位前准备清单，列出厂家协议证据、T31/T33 只读预检和 T34 放行门禁。
+- 证据：测试文件 tools/tests/test_t31_readonly_audit.py；现场准备文档 docs/真机到位前准备清单.md；T31 文档已链接该清单。测试预期覆盖 53 次只读 ROS CLI 调用，且断言不包含 movej / stop_motion。
+- 测试：新增 GitHub Actions workflow .github/workflows/t31-offline.yml；当前尚未取得实际 CI 运行结果，未宣称 PASS。
+- 未验证：现场 ROS_DOMAIN_ID、节点参数、六个话题运行态 frame / publisher / 频率、控制器真实协议字段和反馈新鲜度。
+- 现场变更：无。没有连接 ROS 现场、没有连接控制器、没有发送运动命令、没有改动 URDF / IK / Bridge 运行文件。
