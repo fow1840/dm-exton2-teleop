@@ -106,6 +106,8 @@ class FakeController:
                        if i != self.plan.index)
             if self.fault == "disconnect":
                 raise ConnectionError("transport disconnected")
+            if self.fault == "move_rejected":
+                raise probe.ControllerStateError("movej failed: 'program_run_failed'")
             if self.fault not in ("frozen", "stale_feedback") and not (
                 self.fault == "return" and self.moves == 2
             ):
@@ -173,6 +175,14 @@ class SamplingTests(unittest.TestCase):
         self.assertEqual(records[-1]["type"], "aborted")
         self.assertFalse(records[-1]["stop"]["attempted"])
         self.assertFalse(records[-1]["stop"]["acknowledged"])
+        self.assertIn("skipped_reason", records[-1]["stop"])
+
+    def test_explicit_move_rejection_does_not_send_stop_motion(self):
+        ctrl, records = self.run_case(fault="move_rejected")
+        self.assertEqual(ctrl.commands.count("movej"), 1)
+        self.assertNotIn("stop_motion", ctrl.commands)
+        self.assertEqual(records[-1]["type"], "aborted")
+        self.assertFalse(records[-1]["stop"]["attempted"])
         self.assertIn("skipped_reason", records[-1]["stop"])
 
     def test_motion_failures_stop_without_dispatching_later_points(self):
@@ -294,6 +304,23 @@ class WireTests(unittest.TestCase):
         ]
         with self.assertRaisesRegex(probe.ProbeError, "stop_motion failed"):
             probe.Controller(sock, 1).request("stop_motion")
+
+    def test_explicit_move_or_state_rejection_is_controller_state_error(self):
+        for command in ("movej", "get_device_state"):
+            with self.subTest(command=command):
+                sock = Mock()
+                sock.recv.return_value = (
+                    json.dumps({"command": command, "status": "program_run_failed"}).encode() + b"#"
+                )
+                payload = {"joint": [0] * 17, "v": 1} if command == "movej" else {}
+                with self.assertRaises(probe.ControllerStateError):
+                    probe.Controller(sock, 1).request(command, **payload)
+
+    def test_mismatched_state_reply_is_controller_state_error(self):
+        sock = Mock()
+        sock.recv.return_value = b'{"command":"get_joint_position","status":"program_run_finish"}#'
+        with self.assertRaises(probe.ControllerStateError):
+            probe.Controller(sock, 1).request("get_device_state")
 
 
 if __name__ == "__main__":
