@@ -1376,3 +1376,10 @@ average rate: 250.762
 - 证据：[自动采样方案](./docs/urdf-auto-sampling-plan.md)、[T33 #4](https://github.com/fow1840/dm-exton2-teleop/issues/4)、[T34 #5](https://github.com/fow1840/dm-exton2-teleop/issues/5)。
 - 下一步：T33 离线验证通过后，按 T34 先采左臂单关节的基准、正向、回基准、反向、回基准五点数据。
 - 现场变更：无。本条记录范围为方案与任务优先级，真机自动采样待验证。
+
+## 2026-11-07 | T33 自动采样探针离线实现 | Codex
+
+- 动作：默认离线预演，显式执行时绑定审批摘要。五点流程保存实际关节角、前后配对的 TCP、控制器状态和两次回位误差。加入限位、故障、反馈冻结和异常停止验证。
+- 证据：`test_urdf_axis_probe.py` 9 项通过（Pinocchio 2.7.0，含左右臂方向回放）；`test_bridge_offline.py` 21 项通过；`test_master_slave_map.py` 15 项通过；`git diff --check` 通过。
+- 未验证：现场固件的 MoveJ、保持值、反馈时效和停止行为。T33 离线已验证，等待 PR 审核。T34 继续按 T31、T32、T33 的前置条件和现场批准执行。
+- 现场变更：无。

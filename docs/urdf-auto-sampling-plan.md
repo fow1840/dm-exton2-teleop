@@ -52,3 +52,30 @@
 ## 后续采样
 
 左臂七轴验证通过后，再采肩、肘、腕的不同组合，覆盖常用遥操区域。清理重复构型和异常反馈，把拟合与独立验收数据分开。离线先检查关节坐标和基座/TCP 定义，再决定是否拟合几何参数。报告修正前后的 TCP 位置、姿态和运动方向误差。
+
+## 探针使用与记录
+
+默认离线，只检查 URDF。提供计划文件时，还会输出计划、四个目标与审批摘要，并用 URDF 限位预检。以下两步均可在开发机完成。
+
+~~~bash
+python3 tools/tests/test_urdf_axis_probe.py -v
+python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py /path/to/robot.urdf left --plan /path/to/plan.json
+~~~
+
+计划 JSON 由现场人员核对。关节角和角度容差均为 rad，时间均为秒。
+
+| 字段 | 要求 |
+|---|---|
+| host、port、side、joint | 现场控制器、单侧 left/right、关节编号 1–7 |
+| baseline | 现场已读回并确认的 17 维角度，顺序为腰、左七轴、右七轴、头两轴 |
+| delta_rad、speed_pct | 当次批准的微扰幅度、点到点速度百分比 |
+| limit_margin_rad、urdf_limit_tolerance_rad | 控制器限位安全余量、允许的 URDF 限位差（例如已知的内缩值须在现场核对） |
+| target_tolerance_rad、hold_tolerance_rad、settle_tolerance_rad、settle_s | 目标及回位容差、未选轴容差、停稳角度容差和持续时间 |
+| point_timeout_s、rpc_timeout_s、max_pair_s、min_tcp_rotation_rad | 点位总时限、读接口时限、配对读数时间窗口和可辨识的最小 TCP 转角 |
+| base_frame、tcp_frame、tcp_position_unit | 确认的控制器坐标系、工具坐标系和 TCP 位置单位 m 或 mm |
+
+T34 获批后才可在现场使用执行模式（须另传 `--execute --output`，并在交互终端输入预演显示的审批摘要）。先确认 Bridge 与其他运动客户端已让出控制权，现场独立防护和停止能力有效。探针一次只发一条厂家 V0.3 点到点指令，未选轴使用协议的保持值。回执等待受点位时限约束。等待期间保持单请求，不并发查询。收到回执后仍需通过实际反馈确认到位与停稳。T34 需核对现场固件的回执、保持值和停止行为。
+
+输出为逐行 JSON。有效点保留 `q17`、以米和 qw-first 四元数表示的 `tcp14`、配对前后原始应答和返回基准的误差。请求与收包时间来自现场主机，V0.3 文档未定义设备采样时间戳。异常记录区分停止请求已尝试和收到回执。网络断开时可能无法收到停止回执，现场仍按独立停止流程处置。
+
+离线方向分析使用仓库的 Pink/Pinocchio 环境。基座和 TCP 定义核对后，可以用 `--analyze 记录.jsonl --frames-verified --min-rotation-rad 阈值` 用记录中的同一份 URDF 读取完整的五点记录。正反向结果要同向支持同一个判定，混合结果或信号不足记为 `UNCERTAIN`。
