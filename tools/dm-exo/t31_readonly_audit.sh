@@ -48,7 +48,7 @@ capture() {
     printf 'observed_condition=%s\n' "${T31_OBSERVATION:-unspecified}"
     printf 'ik_node=%s\nfk_node=%s\nbridge_node=%s\n' "$ik" "$fk" "$bridge"
     printf '\nCandidate processes (PID, owner, executable name and selected environment keys)\n'
-    pattern='(^|[/[:space:]])(MessageBridge|Puppetry|ik_node|joint_to_pose_adapter|exton_bridge[.]py|robot_state_publisher)([[:space:]]|$)'
+    pattern='(^|[/[:space:]])(MessageBridge([.]py)?|Puppetry([.]py)?|ik_node([.]py)?|joint_to_pose_adapter([.]py)?|exton_bridge[.]py|robot_state_publisher)([[:space:]]|$)'
     while IFS= read -r pid; do
         ps -o pid=,user=,comm= -p "$pid" || continue
         if [[ ! -r /proc/$pid/environ ]]; then
