@@ -186,12 +186,21 @@ class Controller:
             except (ValueError, UnicodeError) as exc:
                 raise ProbeError("invalid controller JSON") from exc
             if not isinstance(reply, dict) or reply.get("command") != command:
-                # Stop can follow a timed-out request. A late reply is not a stop ACK.
+                # A mismatched state/motion reply leaves controller state ambiguous.
+                # Do not issue another control command until an operator inspects it.
                 if command == "stop_motion":
                     continue
-                raise ProbeError(f"unexpected reply while waiting for {command}")
+                detail = f"unexpected reply while waiting for {command}"
+                if command in ("get_device_state", "movej"):
+                    raise ControllerStateError(detail)
+                raise ProbeError(detail)
             if reply.get("status") != SUCCESS:
-                raise ProbeError(f"{command} failed: {reply.get('status')!r}")
+                detail = f"{command} failed: {reply.get('status')!r}"
+                # An explicit motion rejection or failed state query is not a generic
+                # transport error. Avoid sending stop_motion into an unknown/faulted state.
+                if command in ("get_device_state", "movej"):
+                    raise ControllerStateError(detail)
+                raise ProbeError(detail)
             return Reply(reply, sent, time.monotonic())
 
     def _set_timeout(self, deadline):
