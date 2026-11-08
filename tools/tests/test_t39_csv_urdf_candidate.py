@@ -163,12 +163,23 @@ class T39CsvUrdfCandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing left-arm joints"):
             candidate.generate_candidate(self.source, bad_csv, self.temp_path / "missing-candidate-NOT_FOR_ROBOT.urdf")
 
-    def test_rejects_duplicate_joint_or_link_row(self):
+    def test_rejects_duplicate_joint_name_even_when_child_link_is_blank(self):
         def mutate(rows):
-            rows.append(dict(next(row for row in rows if row["Joint Name"] == "Joint1L")))
+            duplicate = dict(next(row for row in rows if row["Joint Name"] == "Joint1L"))
+            duplicate["Link Name"] = ""
+            rows.append(duplicate)
         bad_csv = self._write_modified_csv(mutate, "duplicate-joint.csv")
-        with self.assertRaisesRegex(ValueError, "duplicate CSV"):
-            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "duplicate-candidate-NOT_FOR_ROBOT.urdf")
+        with self.assertRaisesRegex(ValueError, "duplicate CSV joint row"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "duplicate-joint-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_duplicate_link_row(self):
+        def mutate(rows):
+            duplicate = dict(next(row for row in rows if row["Link Name"] == "Link1L"))
+            duplicate["Joint Name"] = ""
+            rows.append(duplicate)
+        bad_csv = self._write_modified_csv(mutate, "duplicate-link.csv")
+        with self.assertRaisesRegex(ValueError, "duplicate CSV link row"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "duplicate-link-candidate-NOT_FOR_ROBOT.urdf")
 
     def test_rejects_parent_child_mismatch(self):
         def mutate(rows):
@@ -176,6 +187,20 @@ class T39CsvUrdfCandidateTests(unittest.TestCase):
         bad_csv = self._write_modified_csv(mutate, "wrong-parent.csv")
         with self.assertRaisesRegex(ValueError, "parent mismatch"):
             candidate.generate_candidate(self.source, bad_csv, self.temp_path / "parent-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_child_link_mismatch(self):
+        def mutate(rows):
+            next(row for row in rows if row["Joint Name"] == "Joint4L")["Link Name"] = "WrongChild"
+        bad_csv = self._write_modified_csv(mutate, "wrong-child.csv")
+        with self.assertRaisesRegex(ValueError, "child mismatch"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "child-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_non_revolute_joint(self):
+        def mutate(rows):
+            next(row for row in rows if row["Joint Name"] == "Joint5L")["Joint Type"] = "fixed"
+        bad_csv = self._write_modified_csv(mutate, "wrong-type.csv")
+        with self.assertRaisesRegex(ValueError, "type mismatch"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "type-candidate-NOT_FOR_ROBOT.urdf")
 
     def test_rejects_zero_axis(self):
         def mutate(rows):
