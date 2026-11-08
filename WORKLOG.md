@@ -1432,3 +1432,14 @@ average rate: 250.762
 - 证据：GitHub Actions run 42387029702，job t33-offline success；18 项测试全部 OK，含 Pinocchio 2.7.0 FK 回放、左右臂五点模拟、故障响应、只读预检部分证据和坐标系计划门禁；py_compile 与 git diff --check 成功。
 - 未验证：厂家 V0.3 运动中 state 状态值、movej 回执语义、反馈新鲜度、stop_motion 真实行为。若运动期间 state 返回 moving/busy，需先按正式状态机契约适配代码，不得放宽白名单。
 - 现场变更：无。
+
+
+## 2026-11-08 | T33 协议字段证据纠正与安全门禁确认 | GPT-6
+
+- 纠正此前 T33 审查记录中的一句不准确表述：早期 docs/机械臂通信协议说明_V0.3_梳理.md 只摘录了 erroeCode、hardwareErrors、softwareErrors，因此曾把 state / motorErrorDetails 写成“现场未验证”。复核仓库历史原始响应后确认，这两个字段都已有现场证据；问题是 Markdown 梳理漏项，不是没有源文件或控制器从未返回。
+- 证据：TASKS.md T28 保存 2026-11-06 16:10 原始故障报文：erroeCode=1、hardwareErrors=[17235970]、motorErrorDetails=[{motor_id:7,motor_detail_code:8,...}]、softwareErrors=[]、state="fault"。WORKLOG.md 2026-11-06 16:19 记录故障清除后 motorErrorDetails=null、softwareErrors=[]、state="ready"；另有 17:44:40 完整报文 state="idle" 但 erroeCode=2、softwareErrors=[34013185]，证明不能只看 state 判无故障。
+- 命令边界：#7 get_device_state 是状态查询；#8 get_config 是独立配置/软限位查询；#11 enable_robot、#12/13 disable_robot、#10 clear_fault 是独立命令。T33 不调用使能、下使能或清故障命令；idle/ready 不等同于已使能，T34 仍由现场操作员通过示教器/5566 确认。
+- 代码结论：check_device() 已要求 state、hardwareErrors、softwareErrors、motorErrorDetails 和协议错误码；允许 motorErrorDetails 为 null 或空数组；只接受 state=idle/ready、整数 0 错误码和空错误列表。此次未放宽任何门禁，只补充解析器来源注释、协议字段说明和回归测试。
+- 新增离线测试：覆盖 clean-state 合法形状（模拟数据）、历史硬件堵转报文、state=idle 但软件故障非空、未知/moving/busy 状态拒绝，以及采样/只读预检绝不发送 enable_robot、disable_robot、clear_fault。这些是离线回归，不等同于新的现场健康态采集。
+- 未验证：尚无完整健康态 get_device_state 原始报文；完整 state 枚举/转换、设备侧反馈时间戳与序号、使能状态是否有独立可读字段，仍需原始 PDF 对照及现场只读响应/厂家确认。
+- 现场变更：无。未连接控制器、未发送运动命令、未清故障、未使能/下使能、未修改现场 URDF / Bridge / ROS 参数。
