@@ -1450,3 +1450,10 @@ average rate: 250.762
 - 证据：GitHub Actions run 42436808400（commit 84f4905e9df959111a22d9418b4922180ec69dad），job t33-offline success；21 项测试全部通过，包含 Pinocchio 左右臂 FK 回放、clean idle/ready 模拟结构、历史 T28 堵转报文 fail-closed、idle+软件故障报文 fail-closed、fault/moving/busy/unknown 状态拒绝，以及不自动 enable/disable/clear_fault；py_compile 与 git diff --check 均通过。
 - 结论：本轮协议字段证据纠正与安全门禁回归通过离线 CI。CI 只证明模拟测试与静态检查通过，不代表已取得完整健康态真机响应，不代表现场状态机、反馈新鲜度、使能状态或运动/停止行为已验证。
 - 现场变更：无。未连接控制器、未发送运动命令、未清故障、未使能/下使能。
+
+
+## 2026-11-08 | T33 最终 PR 分支快照复验 | GPT-6
+
+- 证据：最后一笔台账提交 34d65a914dc6e74dffd64f81f3a5f1ba82e29fbd 对应 GitHub Actions run 42436933796，job t33-offline success；Ran 21 tests / OK；Pinocchio 安装、py_compile、git diff --check 全部成功。
+- 结论：协议梳理、采样方案、探针注释、回归测试、WORKLOG 和 TASKS 的最终分支快照均通过 CI。PR #11 保持 OPEN，未合并。
+- 现场变更：无。未连接控制器、未发送任何运动/使能/下使能/清故障命令。
