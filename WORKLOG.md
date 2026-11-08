@@ -1467,3 +1467,14 @@ average rate: 250.762
 - T33 状态更新为 DONE，仅表示代码/离线验收完成。没有连接控制器、没有运行只读现场预检、没有发送 movej / stop_motion / enable_robot / disable_robot / clear_fault，也没有修改现场 URDF、Bridge 或 ROS 参数。
 - T34 仍为 BLOCKED：需先完成 T31 运行态只读审计、阅读 T32 离线对账结果，核实当前控制器 get_device_state 状态机（特别是运动期间是否返回 moving/busy）、反馈新鲜度/设备时间戳、MoveJ 回执与保持值、独立停止流程；操作员在场明确批准后，才可做左臂单关节五点试采。
 - 重要边界：当前探针在设备状态故障/缺失/未知时 fail-closed，并跳过自动 stop_motion，交由现场操作员按已验证的独立停止流程处置。不能把离线模拟测试通过解释为可直接启动真机。
+
+
+## 2026-11-08 | T31 源码契约复核与只读采集器接手 | GPT-6
+
+- 动作：按 AGENTS.md 接手流程复核 HANDOFF.md、TASKS.md T29/T30、现场调试手册、IK/FK launch、IK target_cb、FK adapter 和 Bridge 反馈发布路径；复用并加强 PR #13 的只读 ROS 采集器与 fake ROS CLI 回归。
+- 源码证据：IK launch 默认 root/ref frame 均为 base_link，目标末端为右 Link7 / 左 Link7L；target_cb 读取 PoseStamped 的位置与 XYZW 四元数，但不读取 header.frame_id、不做 TF 变换，因此上游 target 必须已处于 IK 的 base_link 解释坐标约定。FK adapter 默认 base_frame=base_link，左右末端分别 Link7L/Link7；Bridge 发布 JointState 时 stamp 为本机 ROS 当前时间、frame_id=base_link、关节名顺序为右七轴再左七轴；若 TCP 反馈快照为空，会回退到指令缓存，消息时间戳不等于设备采样时间戳。
+- 状态语义：/target_robot/{left,right}_ee/state 由 FK adapter 与 IK 都声明发布端；FK 在任一侧 clutch 按下时按 yield_when_clutch 默认抑制双侧状态，IK 在 publish_commanded_ee_state=true 且 clutch 活跃时可能发布命令 FK 状态。必须结合运行态参数、topic info 和样本来源判断，不能仅凭 topic 名把该话题认作真机实测末端。
+- 现场证据：尚未取得现场 ROS_DOMAIN_ID、运行节点、IK 参数、六话题 publisher/type/sample/rate 和 target/state frame_id；现场 SSH 隧道仅能在同一局域网使用，本轮没有远程 ROS 主机访问能力。
+- 验证：PR #13 原始分支 CI run 42388058353 success（fake ROS CLI 3 项测试）；本轮增加对六话题全部 info/sample/rate、必需参数读取、frame_id 样本保留和只读命令白名单的断言，等待新 PR CI。
+- 结论：源码契约与只读采集工具已准备；T31 仍 BLOCKED，必须在现场 ROS 主机或同一 ROS 2 局域网执行采集。未把历史 2026-11-06 参数日志当作当前运行态。
+- 现场变更：无。未连接控制器、未发运动命令、未写 ROS 参数、未重启任何进程。
