@@ -217,6 +217,7 @@ class Controller:
 
 
 def check_device(reply):
+    """Fail closed on the observed state/error schema; motorErrorDetails may be null."""
     raw = reply.raw
     required = ("state", "hardwareErrors", "softwareErrors", "motorErrorDetails")
     missing = [key for key in required if key not in raw]
