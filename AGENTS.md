@@ -5,11 +5,11 @@
 ## 0. 接手流程（先做这个，按顺序）
 
 1. 读 `HANDOFF.md` §四（当前阻塞项）→ 读 `TASKS.md`（任务台账，唯一权威）
-   → 若领取 T31～T38，必须读 [docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)
+   → 若领取 T31～T39，必须读 [docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)
    → 读 [docs/机器人现场调试手册.md](./docs/机器人现场调试手册.md)（调试工作方式：快速实验驱动模式，实验记录模板见其 §4.1）
 2. 执行 **T01 现场状态再核对**：上一份快照是 2026-11-05 21:42，现场可能已变。
    核对结果与快照不一致时，先改 `TASKS.md` §一 再干活。
-3. 认领 T31～T38：先从 `TASKS.md` 打开对应 GitHub Issue，只领取带 `status:ready` 且依赖已满足的任务；先评论 `[CLAIM] AI 标识 / 日期时间`，确认无人认领后（权限允许时）设置 Assignee，再将 Issue 标签改为 `status:in-progress`，并把 `TASKS.md` 状态改为 `DOING`。其他任务仍按对应任务卡流程领取。
+3. 认领 T31～T39：先从 `TASKS.md` 打开对应 GitHub Issue，只领取带 `status:ready` 且依赖已满足的任务；先评论 `[CLAIM] AI 标识 / 日期时间`，确认无人认领后（权限允许时）设置 Assignee，再将 Issue 标签改为 `status:in-progress`，并把 `TASKS.md` 状态改为 `DOING`。其他任务仍按对应任务卡流程领取。
 4. 干活 → 每完成一个动作就往 `WORKLOG.md` 追加一条（用文件里的模板，必须带证据原文）
 5. 收工时：`TASKS.md` 改状态，`WORKLOG.md` 补最后一条，结论有变化就回写 `HANDOFF.md`
 
