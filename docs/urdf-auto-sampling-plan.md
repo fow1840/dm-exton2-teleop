@@ -83,7 +83,9 @@ T34 获批后才可在现场使用执行模式（须另传 `--execute --output`�
 - 协议梳理文档明确 `get_tcp_pose` 的 `pose[14]` 顺序为左 TCP 7D + 右 TCP 7D，每段为 `(x,y,z,qw,qx,qy,qz)`。探针保留两臂数据，左臂旋转四元数偏移为 3，右臂为 10；左右臂模拟测试分别验证对应一段发生变化。此处依据仓库协议梳理，不等同于 T33 已取得现场原始应答。
 - `get_device_state` 安全门禁要求响应显式包含 `state`、`hardwareErrors`、`softwareErrors`、`motorErrorDetails`，并包含协议错误码（`erroeCode`，兼容 `errorCode`）。状态必须是 `idle/ready`，错误码必须为整数 0，两个错误列表必须为空，电机错误明细只能为空列表或显式 `null`。任一字段缺失、类型不符或存在错误均 fail-closed。
 - 当前执行校验在每次采样轮询中都要求 `state` 为 `idle/ready`。厂家必须说明 movej 回执是动作完成还是仅接收，以及运动期间 `state` 是否会变为 `moving/busy`；若运动期间返回其他状态，T34 必须先根据正式状态机契约调整代码并补测，不得直接放宽白名单。
-- **协议 V0.3 梳理目前只列出 `erroeCode`、`hardwareErrors`、`softwareErrors`，没有定义 `state` 和 `motorErrorDetails`。** 因此如果现场固件响应不包含这两个字段，执行模式会拒绝启动；不得为了让程序运行而把缺失字段当成无故障。需要 T34 现场保存脱敏原始响应，或由厂家补充字段契约后再决定是否扩展解析。
+- **字段证据分层（纠正此前审查表述）**：仓库早期的 V0.3 Markdown 梳理只摘录了 erroeCode、hardwareErrors、softwareErrors，漏列 state 与 motorErrorDetails；但二者已有现场实证，并非“未知字段”。TASKS.md 的 T28 保存了完整故障响应（state="fault"、motorErrorDetails:[...]、erroeCode:1）；WORKLOG.md 记录故障清除后出现过 state="ready"、motorErrorDetails:null、softwareErrors:[]，以及 state="idle" 但 erroeCode=2、softwareErrors 非空的响应。当前历史材料仍缺一份完整健康态原始报文，也未给出完整状态枚举/转换规则和电机明细对象的正式 schema；不得把部分现场证据扩写成厂家完整规范。
+- T33 当前解析器的严格门禁保持不变：必须有 state、hardwareErrors、softwareErrors、motorErrorDetails 和协议错误码；仅接受 state=idle/ready、错误码整数 0、两个错误列表为空，且 motorErrorDetails 为 null 或空数组。缺字段、未知状态、非空故障或类型不符均 fail-closed。离线测试覆盖的是模拟契约，不代表已取得完整健康态现场报文。
+- 命令边界：#7 get_device_state 是查询；#8 get_config 是独立限位查询；#11 enable_robot、#12/13 disable_robot 和 #10 clear_fault 是独立控制命令。T33 不得自动清故障/上使能/下使能；idle/ready 本身也不构成“已使能”的证明。T34 仍须由现场操作员在示教器/5566 确认使能状态并明确批准。
 - 若运动后检测到控制器状态故障或状态响应不完整，探针**不会再发送 `stop_motion`**，只记录跳过原因并交由现场操作员按已验证流程处置。现已进一步将 `get_device_state` 或 `movej` 的显式非成功回执、以及这两类请求收到的错配响应归为控制器状态不确定：不再追加 `stop_motion` 或其他运动命令。若是普通通信异常，则仍会尝试协议停止；没有收到停止回执不代表机械臂已停止。
 - 本机文件锁只防止同一主机/用户的探针实例并发，不代表能识别所有外部运动客户端。执行前仍必须由操作员确认 Bridge、示教 GUI 和其他客户端已让出控制器连接与运动控制权。若 TCP 连接冲突，探针记录中止，不下发运动。
 - V0.3 没有设备侧采样时间戳或序号。探针记录主机发送/接收时间，并通过目标进度、停稳窗口和关节/TCP/关节配对检查拒绝未产生预期进度的冻结反馈；但主机接收时间**不能证明设备数据源新鲜**，也无法排除“旧缓存恰好等于目标值”。T34 必须现场核实反馈更新机制/时间戳；未核实前不得宣称 stale feedback 已被完全证明可检出。
@@ -109,7 +111,7 @@ python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py \
 
 - 这是**只读网络连接**，不是零连接；当前型号 TCP 30485 为单连接。执行前仍须由现场人员确认 T3 Bridge、示教 GUI 和其他客户端已释放连接。不能与遥操作同时运行。
 - 输出文件必须是新文件；内容包含四类原始响应、主机请求/接收时间和本次 URDF SHA256。某一只读请求失败时仍会保存已取得的部分响应和失败命令，不会继续查询；目录应保存在现场私有位置，公开 GitHub 只放脱敏摘要。
-- 先核对 get_device_state 的真实字段和状态值；特别确认 state、motorErrorDetails 是否存在，以及 erroeCode / errorCode 的实际拼写。
+- 保存并核对现场 get_device_state 完整原始响应：历史上已见 state、motorErrorDetails；本次固件仍需核对字段是否保持、错误码拼写/类型、motorErrorDetails 的 null/数组形式及状态值。历史完整健康态样本尚缺。
 - 核对 get_config 的 lowerLimits / upperLimits 是否为 14 项、顺序是否确为左七轴再右七轴、单位是否为 rad。
 - 核对 get_joint_position 的 joint 是否为 17 项，顺序是否为腰、左七轴、右七轴、头两轴，单位是否为 rad，且数据确实来自实时反馈。
 - 核对 get_tcp_pose 的 pose 是否为 14 项、左右臂顺序和四元数顺序是否与 V0.3 文档一致，并确认基座、工具帧和位置单位。
