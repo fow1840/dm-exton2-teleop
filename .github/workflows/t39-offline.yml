@@ -1,0 +1,38 @@
+name: T39 CSV-derived URDF candidate tests
+
+on:
+  push:
+    branches:
+      - gpt6/t39-csv-urdf-candidate-20261108
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  t39-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Run T32 source audit
+        run: python tools/tests/test_t32_urdf_csv_audit.py -v
+      - name: Run T39 candidate regression tests
+        run: python tools/tests/test_t39_csv_urdf_candidate.py -v
+      - name: Generate an isolated candidate and report
+        run: |
+          python tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py \
+            --output /tmp/left-candidate-NOT_FOR_ROBOT.urdf \
+            --report /tmp/left-candidate-report.json
+          test -s /tmp/left-candidate-NOT_FOR_ROBOT.urdf
+          test -s /tmp/left-candidate-report.json
+      - name: Compile T39 code
+        run: python -m py_compile tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py tools/tests/test_t39_csv_urdf_candidate.py
+      - name: Check patch whitespace
+        run: git diff --check
