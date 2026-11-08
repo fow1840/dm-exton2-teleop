@@ -1546,3 +1546,14 @@ average rate: 250.762
 - 初始验证：T39 自动化测试已添加，尚待 PR CI 实际执行；未声称通过。生成器只写带 candidate 与 NOT_FOR_ROBOT 标记的输出路径，不连接控制器、不发 ROS 命令。
 - 当前优先级：T39 与 T31 并行；T34 需等待 T39 离线候选报告、T31 现场 frame/反馈核验、控制器协议/限位/停止行为核实和当次操作员批准。T35 继续冻结。
 - 现场变更：无。未连接 ROS 主机或控制器、未启动 RViz / IK / Bridge、未发送运动命令、未修改生产 URDF / ROS 参数。
+
+
+## 2026-11-08 | T39 离线 CI 与候选生成验收 | GPT-6
+
+- PR：[ #22 ](https://github.com/fow1840/dm-exton2-teleop/pull/22)，当前 OPEN，尚未合并。
+- T39 GitHub Actions：run 42457281303 / job 128658890220，success；T39 回归测试 15 tests PASS，候选生成 CLI 执行成功，生成的临时候选 URDF 与 JSON 报告均非空。
+- T32 复验：run 42457281322 / job 128658890414，success；6 tests PASS。
+- 同一 PR 关联回归：T31 run 42457281270 success；T33 run 42457281263 success。
+- 已加入静态候选 URDF 的 XML/CSV 一致性测试；两个候选文件均通过解析，检查了左臂 CSV origin/axis、右臂不变、base mount 不变和限位保留。
+- 状态：离线实现与 CI 验收通过；PR 等待 review/merge，故 T39 在任务台账保持 DOING，不宣称已合并。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动现场节点、未发送运动命令、未修改生产 URDF / Bridge / IK / ROS 参数。
