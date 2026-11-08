@@ -212,7 +212,7 @@ J7 在限位外时控制器是否拒绝 movej 未验证；若 5Hz 后仍偶发�
 
 任务总说明：[docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)
 
-**当前第一优先级（2026-11-08）**：T39 CSV 候选 URDF 离线生成/对比已完成（18/18 回归、Pink IK 2/2、T32 6/6 PASS），PR #22 OPEN，待 review/merge；当前实际推进重点转为 T31 现场 ROS 只读采集。T31 与 T39 结果均可复核后，在控制器协议/限位/反馈/停止行为核实且操作员明确批准下执行 T34 左臂真实物理方向验证（先单关节五点，再逐轴扩展）。T32/T33 已完成。T30 历史翻转表任务并入 T34；旧版直接执行命令和固定 +0.12rad 幅度废止。CSV 候选不是实测真机模型；T39 首轮离线比较结果为混合：全样本相对旋转中位数未优于 W，但最大误差降低；排除 L01 后中位数改善，绝对 TCP 残差仍未改善且 frame 假设未核实。不得据此选定 C。Pink 合成目标对照中 W 6/6 收敛、C 0/6，但目标由 W FK 生成，不是真机 ground truth；它只说明在共同 base/frame 假设下两模型差异很大。真实方向表完成前，T35 及生产 URDF / Bridge / IK 符号修正保持冻结。
+**当前第一优先级（2026-11-08）**：T39 CSV 候选 URDF 离线生成/对比已完成（18/18 回归、Pink IK 2/2、T32 6/6 PASS），PR #22 已合并（c3e7f06）；当前实际推进重点转为 T31 现场 ROS 只读采集。T31 与 T39 结果均可复核后，在控制器协议/限位/反馈/停止行为核实且操作员明确批准下执行 T34 左臂真实物理方向验证（先单关节五点，再逐轴扩展）。T32/T33 已完成。T30 历史翻转表任务并入 T34；旧版直接执行命令和固定 +0.12rad 幅度废止。CSV 候选不是实测真机模型；T39 首轮离线比较结果为混合：全样本相对旋转中位数未优于 W，但最大误差降低；排除 L01 后中位数改善，绝对 TCP 残差仍未改善且 frame 假设未核实。不得据此选定 C。Pink 合成目标对照中 W 6/6 收敛、C 0/6，但目标由 W FK 生成，不是真机 ground truth；它只说明在共同 base/frame 假设下两模型差异很大。真实方向表完成前，T35 及生产 URDF / Bridge / IK 符号修正保持冻结。
 
 任务台账：[TASKS.md](./TASKS.md)（唯一权威状态）；GitHub Issues 用于领取、讨论、依赖交叉引用和 PR 关联。
 
@@ -226,7 +226,7 @@ J7 在限位外时控制器是否拒绝 movej 未验证；若 5Hz 后仍偶发�
 | T36 左臂末端平移六方向标定 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) | `status:blocked` |
 | T37 姿态映射与低倍率端到端验收 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) | `status:blocked` |
 | T38 结案与交接资料更新 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) | `status:blocked` |
-| T39 CSV 候选 URDF 生成与离线对比 | [#21](https://github.com/fow1840/dm-exton2-teleop/issues/21) | `status:in-progress`（离线实现与 CI 验收完成：T39 18/18、Pink IK 2/2、T32 6/6 PASS；PR #22 待 review/merge） |
+| T39 CSV 候选 URDF 生成与离线对比 | [#21](https://github.com/fow1840/dm-exton2-teleop/issues/21) | `DONE`（离线实现与 CI 验收完成：T39 18/18、Pink IK 2/2、T32 6/6 PASS；PR #22 已合并（c3e7f06）） |
 
 ### AI 领取步骤
 
