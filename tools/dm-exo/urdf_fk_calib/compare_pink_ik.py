@@ -73,6 +73,7 @@ def _pose_error(config, target) -> tuple[float, float]:
 def _solve_one(model, target, q_seed: np.ndarray, q_posture: np.ndarray, max_iter: int, dt: float):
     data = model.createData()
     config = pink.Configuration(model, data, q_seed.copy())
+    config.update(q_seed.copy())
     frame_task = FrameTask("Link7L", position_cost=300.0, orientation_cost=40.0)
     posture_task = PostureTask(cost=0.3)
     damping_task = DampingTask(cost=12.0)
