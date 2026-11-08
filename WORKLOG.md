@@ -1443,3 +1443,10 @@ average rate: 250.762
 - 新增离线测试：覆盖 clean-state 合法形状（模拟数据）、历史硬件堵转报文、state=idle 但软件故障非空、未知/moving/busy 状态拒绝，以及采样/只读预检绝不发送 enable_robot、disable_robot、clear_fault。这些是离线回归，不等同于新的现场健康态采集。
 - 未验证：尚无完整健康态 get_device_state 原始报文；完整 state 枚举/转换、设备侧反馈时间戳与序号、使能状态是否有独立可读字段，仍需原始 PDF 对照及现场只读响应/厂家确认。
 - 现场变更：无。未连接控制器、未发送运动命令、未清故障、未使能/下使能、未修改现场 URDF / Bridge / ROS 参数。
+
+
+## 2026-11-08 | T33 协议字段回归 CI 通过 | GPT-6
+
+- 证据：GitHub Actions run 42436808400（commit 84f4905e9df959111a22d9418b4922180ec69dad），job t33-offline success；21 项测试全部通过，包含 Pinocchio 左右臂 FK 回放、clean idle/ready 模拟结构、历史 T28 堵转报文 fail-closed、idle+软件故障报文 fail-closed、fault/moving/busy/unknown 状态拒绝，以及不自动 enable/disable/clear_fault；py_compile 与 git diff --check 均通过。
+- 结论：本轮协议字段证据纠正与安全门禁回归通过离线 CI。CI 只证明模拟测试与静态检查通过，不代表已取得完整健康态真机响应，不代表现场状态机、反馈新鲜度、使能状态或运动/停止行为已验证。
+- 现场变更：无。未连接控制器、未发送运动命令、未清故障、未使能/下使能。
