@@ -1,4 +1,5 @@
 """Offline regression tests for T39 CSV-derived left-arm URDF candidates."""
+import copy
 import csv
 import json
 from pathlib import Path
@@ -13,6 +14,15 @@ sys.path.insert(0, str(MODULE_DIR))
 
 import audit_urdf_csv as audit
 import csv_urdf_candidate as candidate
+
+
+def _semantic_xml(element):
+    clone = copy.deepcopy(element)
+    for node in clone.iter():
+        if node.text is not None and not node.text.strip():
+            node.text = None
+        node.tail = None
+    return ET.tostring(clone, encoding="unicode")
 
 
 class T39CsvUrdfCandidateTests(unittest.TestCase):
@@ -81,8 +91,8 @@ class T39CsvUrdfCandidateTests(unittest.TestCase):
         candidate_links = {x.attrib["name"]: x for x in candidate_root.findall("link")}
         for name in candidate.LEFT_LINKS:
             self.assertEqual(
-                ET.tostring(baseline_links[name], encoding="unicode"),
-                ET.tostring(candidate_links[name], encoding="unicode"),
+                _semantic_xml(baseline_links[name]),
+                _semantic_xml(candidate_links[name]),
             )
 
     def test_optional_csv_visual_frame_variant_changes_only_visual_collision_origins(self):
@@ -94,7 +104,7 @@ class T39CsvUrdfCandidateTests(unittest.TestCase):
         candidate_links = {x.attrib["name"]: x for x in candidate_root.findall("link")}
         for name in candidate.LEFT_LINKS:
             before, after = baseline_links[name], candidate_links[name]
-            self.assertEqual(ET.tostring(before.find("inertial")), ET.tostring(after.find("inertial")))
+            self.assertEqual(_semantic_xml(before.find("inertial")), _semantic_xml(after.find("inertial")))
             for tag in ("visual", "collision"):
                 self.assertEqual(
                     before.find(tag).find("geometry").find("mesh").attrib,
@@ -169,7 +179,8 @@ class T39CsvUrdfCandidateTests(unittest.TestCase):
         self.assertAlmostEqual(all_pairs["csv_candidate_C"]["max"], 75.80, delta=0.05)
         self.assertAlmostEqual(without_l01["csv_candidate_C"]["median"], 20.10, delta=0.05)
         self.assertAlmostEqual(without_l01["csv_candidate_C"]["max"], 75.80, delta=0.05)
-        self.assertTrue(all(report["structural_checks"].values()))
+        self.assertTrue(all(value for key, value in report["structural_checks"].items() if key != "robot_deployment_allowed"))
+        self.assertFalse(report["structural_checks"]["robot_deployment_allowed"])
 
     def test_report_marks_controller_tcp_and_frame_assumptions_unverified(self):
         report = candidate.compare_models(
