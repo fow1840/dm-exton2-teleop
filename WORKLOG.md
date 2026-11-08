@@ -1534,3 +1534,15 @@ average rate: 250.762
 - 任务治理：T30 历史真机方向探针工作并入 T34，避免两套执行入口；旧版直接运行命令和固定 +0.12rad 幅度废止。T29 已部署的映射框架保留，但新的真机六方向标定暂缓到 T34/T35 结论之后。T35 及 URDF / Bridge / IK 符号修正保持冻结。
 - 状态：T31 仍 BLOCKED（等待现场 ROS 运行态证据）；T34 仍 BLOCKED（等待 T31 通过及当次现场操作员批准）。本轮只调整任务优先级与文档，不代表任何真机验证已执行。
 - 现场变更：无。未连接 ROS 主机或控制器、未发送运动命令、未写 ROS 参数、未重启现场进程、未修改 URDF / Bridge / IK。
+
+
+## 2026-11-08 | T39 CSV 候选 URDF 生成与离线对比启动 | GPT-6
+
+- 目标：按用户批准的组合方案，以厂家 SolidWorks CSV 为基准生成独立左臂候选 URDF，并与当前 W 模型进行可复现离线比较；不替代 T31 / T34 真机验证。
+- 任务治理：现有 T37 已占用（姿态映射与低倍率端到端验收，Issue #8），因此新任务编号采用 T39，避免覆盖既有任务；GitHub Issue #21 已创建并领取，分支 gpt6/t39-csv-urdf-candidate-20261108。
+- 已提交分支内容：tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py（标准库生成器）；tools/tests/test_t39_csv_urdf_candidate.py（回归测试）；docs/T39_CSV候选URDF生成与离线验证.md；两份候选 URDF（kinematics-only 与 CSV visual-frame diagnostic），均明确 NOT_FOR_ROBOT。
+- 模型边界：默认候选只替换 Joint1L～Joint7L 的 origin xyz/rpy 与 axis；保留 W 的右臂、全部限位、base_link_to_base 固定安装、link visual/collision/inertial 和 mesh URI。可选 visual 变体只更新左侧 visual/collision origin，仍保留 mesh 和 inertial。CSV 导出的零限位不会导入。
+- 离线报告设计：逐关节 world axis / dot、origin 差异、限位与右臂保持检查；历史 JSONL 7 个去重姿态的 FK 直接残差，以及相对旋转角不变量对比；明确 controller TCP / base / Link7L 假设未验证，controller TCP 不是独立外部测量。
+- 初始验证：T39 自动化测试已添加，尚待 PR CI 实际执行；未声称通过。生成器只写带 candidate 与 NOT_FOR_ROBOT 标记的输出路径，不连接控制器、不发 ROS 命令。
+- 当前优先级：T39 与 T31 并行；T34 需等待 T39 离线候选报告、T31 现场 frame/反馈核验、控制器协议/限位/停止行为核实和当次操作员批准。T35 继续冻结。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动 RViz / IK / Bridge、未发送运动命令、未修改生产 URDF / ROS 参数。
