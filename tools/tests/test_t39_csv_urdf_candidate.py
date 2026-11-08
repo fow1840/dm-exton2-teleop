@@ -1,7 +1,6 @@
 """Offline regression tests for T39 CSV-derived left-arm URDF candidates."""
 import copy
 import csv
-import json
 from pathlib import Path
 import tempfile
 import unittest
