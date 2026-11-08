@@ -1580,3 +1580,12 @@ average rate: 250.762
 - 解释边界：目标由 W FK 合成，不是控制器 TCP 或外部测量。结果证明在当前共同 base/frame 假设下 W/C 运动学差异大，C 不能复现 W 合成目标；不证明 W 就是真机正确模型。若 CSV 的 base/link frame 需要固定变换，T31 必须先核实。
 - T39 workflow run 42458107051 首次包含 Pink stack，当前 run success；测试与完整 Pink 比较命令均执行成功。
 - 现场变更：无。未连接 ROS 主机或控制器、未启动现场 IK/Bridge、未发送运动命令、未修改生产 URDF / ROS 参数。
+
+
+## 2026-11-08 | T39 最终 CI 复验 | GPT-6
+
+- 最新 PR #22 head CI run 42458273319 / job 128661839290：success。
+- T32 6/6、T39 候选生成测试 15/15、Pink IK 测试 2/2 全部 PASS；T31 与 T33 对应 workflow 也 success。
+- 完整 Pink IK 对照 CLI 再次成功：W 6/6 收敛（位置/姿态中位 0.115 mm / 0.059°）；C 0/6 收敛（206.314 mm / 70.315°）。
+- 代码与文档已推到 PR #22；PR 仍 OPEN、mergeable，尚未合并 main。T39 任务维持 DOING，等待 review/merge。
+- 现场变更：无。
