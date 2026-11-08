@@ -609,14 +609,16 @@
 详细执行步骤、输入文件、命令、交付物、安全门禁和验收标准统一见：
 [docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)。
 
-> 本节是 T31～T38 的任务状态唯一入口。任务细节以专项任务包为准。状态初始均为 TODO；依赖未完成不得抢跑。
+> 本节是 T31～T38 的任务状态唯一入口。任务细节见专项任务包和[自动采样方案](./docs/urdf-auto-sampling-plan.md)，任务须满足依赖方可执行。
+
+**自动采样的执行优先级**：P0 首要实现任务为 T33（T31 / T32 可并行）。P0 首个真机任务为 T34，先做左臂单关节五点采样和回位验证，再按批准范围扩展至七轴。
 
 | 编号 | 任务 | 优先级 | 状态 | 依赖 | 执行类型 | GitHub Issue |
 |---|---|---:|---|---|---|---|
 | T31 | 运行态参数与坐标系契约审计 | P0 | TODO | 无 | 只读 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) |
 | T32 | 左右臂 URDF / CSV 运动学离线对账 | P0 | TODO | 无 | 离线只读 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) |
-| T33 | T30 真机方向探针安全加固与离线测试 | P0 | TODO | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
-| T34 | 左臂逐关节真机方向探针 | P0 | BLOCKED | T31、T33；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
+| T33 | 自动采样探针加固与离线测试 | P0（首要实现） | TODO | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
+| T34 | 左臂自动采样与逐轴验证（先单关节试采） | P0（首个真机） | BLOCKED | T31、T33；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
 | T35 | 统一关节坐标转换契约并实施最小修正 | P0 | BLOCKED | T32、T34 | 代码 / 模型，部署另批 | [#6](https://github.com/fow1840/dm-exton2-teleop/issues/6) |
 | T36 | 左臂末端平移六方向标定 | P1 | BLOCKED | T31、T35；运动学门禁复核 | 录制 / 离线拟合 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) |
 | T37 | 姿态映射与低倍率端到端验收 | P1 | BLOCKED | T36 PASS | 真机，需操作员批准 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) |
