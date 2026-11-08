@@ -112,6 +112,39 @@ class T39CsvUrdfCandidateTests(unittest.TestCase):
                 )
         self.assertEqual(candidate._sha256(self.source), self.source_sha)
 
+    def test_checked_in_candidate_urdfs_are_parseable_and_match_csv(self):
+        kinematics_path = MODULE_DIR / "candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-kinematics-candidate-NOT_FOR_ROBOT.urdf"
+        visual_path = MODULE_DIR / "candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-visual-candidate-NOT_FOR_ROBOT.urdf"
+        csv_joints, csv_links = candidate._read_csv_rows(self.csv_path)
+        for path in (kinematics_path, visual_path):
+            root = ET.parse(path).getroot()
+            self.assertIn("NOT_FOR_ROBOT", root.attrib["name"])
+            parsed = audit.parse_urdf(path)
+            baseline = audit.parse_urdf(self.source)
+            for name in candidate.LEFT_JOINTS:
+                expected = candidate._csv_joint_values(csv_joints[name], name)
+                for field in ("xyz", "rpy", "axis"):
+                    for actual, wanted in zip(parsed[name][field], expected[field]):
+                        self.assertAlmostEqual(actual, wanted, places=9)
+                self.assertEqual(parsed[name]["limit"], baseline[name]["limit"])
+            for name in candidate.RIGHT_JOINTS:
+                self.assertEqual(parsed[name], baseline[name])
+            self.assertEqual(parsed["base_link_to_base"], baseline["base_link_to_base"])
+        visual_root = ET.parse(visual_path).getroot()
+        visual_links = {element.attrib["name"]: element for element in visual_root.findall("link")}
+        for name in candidate.LEFT_LINKS:
+            row = csv_links[name]
+            for tag, prefix in (("visual", "Visual"), ("collision", "Collision")):
+                origin = visual_links[name].find(tag).find("origin")
+                expected_xyz = [float(row[prefix + " " + axis]) for axis in ("X", "Y", "Z")]
+                expected_rpy = [float(row[prefix + " " + axis]) for axis in ("Roll", "Pitch", "Yaw")]
+                actual_xyz = [float(value) for value in origin.attrib["xyz"].split()]
+                actual_rpy = [float(value) for value in origin.attrib["rpy"].split()]
+                for actual, wanted in zip(actual_xyz, expected_xyz):
+                    self.assertAlmostEqual(actual, wanted, places=9)
+                for actual, wanted in zip(actual_rpy, expected_rpy):
+                    self.assertAlmostEqual(actual, wanted, places=9)
+
     def test_candidate_xml_is_parseable_and_mount_is_unchanged(self):
         ET.parse(self.candidate_path)
         baseline = audit.parse_urdf(self.source)
