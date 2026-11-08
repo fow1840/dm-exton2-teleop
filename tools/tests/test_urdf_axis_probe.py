@@ -158,6 +158,7 @@ class SamplingTests(unittest.TestCase):
                 self.assertEqual(records[-1]["type"], "completed")
                 self.assertEqual(ctrl.commands.count("movej"), 4)
                 self.assertNotIn("stop_motion", ctrl.commands)
+                self.assertTrue({"enable_robot", "disable_robot", "clear_fault"}.isdisjoint(ctrl.commands))
 
     def test_invalid_preflight_never_moves(self):
         for fault in ("fault", "missing_state", "missing_hardware_errors",
@@ -167,6 +168,63 @@ class SamplingTests(unittest.TestCase):
                 ctrl, records = self.run_case(fault=fault)
                 self.assertNotIn("movej", ctrl.commands)
                 self.assertFalse(records[-1]["stop"]["attempted"])
+
+    def test_device_state_accepts_clean_idle_ready_and_null_or_empty_details(self):
+        # Synthetic clean-state contract: both observed state labels are accepted,
+        # and motorErrorDetails may be null or an empty list.
+        for state in ("idle", "ready"):
+            for details in (None, []):
+                for code_field in ("erroeCode", "errorCode"):
+                    with self.subTest(state=state, details=details, code_field=code_field):
+                        raw = {
+                            "command": "get_device_state",
+                            "status": probe.SUCCESS,
+                            "state": state,
+                            code_field: 0,
+                            "hardwareErrors": [],
+                            "softwareErrors": [],
+                            "motorErrorDetails": details,
+                        }
+                        probe.check_device(probe.Reply(raw, 1.0, 1.01))
+
+    def test_historical_fault_payloads_fail_closed(self):
+        # Exact field/value shapes recorded in T28 and WORKLOG; no field is
+        # silently inferred from state alone.
+        historical = (
+            {
+                "command": "get_device_state", "status": probe.SUCCESS,
+                "erroeCode": 1, "hardwareErrors": [17235970],
+                "motorErrorDetails": [{
+                    "general_desc": "电机7 报错",
+                    "hardware_error_code": 17235970,
+                    "motor_detail_code": 8,
+                    "motor_detail_desc": "堵转",
+                    "motor_id": 7,
+                }],
+                "softwareErrors": [], "state": "fault",
+            },
+            {
+                "command": "get_device_state", "status": probe.SUCCESS,
+                "erroeCode": 2, "hardwareErrors": [],
+                "motorErrorDetails": None,
+                "softwareErrors": [34013185], "state": "idle",
+            },
+        )
+        for raw in historical:
+            with self.subTest(raw=raw):
+                with self.assertRaises(probe.ControllerStateError):
+                    probe.check_device(probe.Reply(raw, 1.0, 1.01))
+
+    def test_unknown_or_motion_state_labels_remain_fail_closed(self):
+        for state in ("fault", "moving", "busy", "unknown", ""):
+            with self.subTest(state=state):
+                raw = {
+                    "command": "get_device_state", "status": probe.SUCCESS,
+                    "erroeCode": 0, "hardwareErrors": [], "softwareErrors": [],
+                    "motorErrorDetails": None, "state": state,
+                }
+                with self.assertRaises(probe.ControllerStateError):
+                    probe.check_device(probe.Reply(raw, 1.0, 1.01))
 
     def test_fault_after_motion_does_not_send_stop_motion(self):
         ctrl, records = self.run_case(fault="fault_after_move")
@@ -353,6 +411,7 @@ class WireTests(unittest.TestCase):
         self.assertEqual(set(report["responses"]), set(ctrl.commands))
         self.assertNotIn("movej", ctrl.commands)
         self.assertNotIn("stop_motion", ctrl.commands)
+        self.assertTrue({"enable_robot", "disable_robot", "clear_fault"}.isdisjoint(ctrl.commands))
 
     def test_inspection_cli_requires_explicit_endpoint_without_connecting(self):
         with patch.object(probe.socket, "create_connection") as connect, \
