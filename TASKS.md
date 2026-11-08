@@ -615,7 +615,7 @@
 
 | 编号 | 任务 | 优先级 | 状态 | 依赖 | 执行类型 | GitHub Issue |
 |---|---|---:|---|---|---|---|
-| T31 | 运行态参数与坐标系契约审计 | P0 | TODO | 无 | 只读 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) |
+| T31 | [运行态参数与坐标系契约审计](./docs/T31运行态与坐标系审计.md) | P0 | BLOCKED（源码审计与只读采集器已完成；现场 ROS 运行态证据待采集） | 无 | 只读 / 不连接控制器 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) |
 | T32 | 左右臂 URDF / CSV 运动学离线对账 | P0 | TODO | 无 | 离线只读 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) |
 | T33 | 自动采样探针加固与离线测试 | P0（首要实现） | DONE（2026-11-08：PR #11 已合并；离线 CI 21/21 PASS；不代表真机验证） | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
 | T34 | 左臂自动采样与逐轴验证（先单关节试采） | P0（首个真机） | BLOCKED | T31、T33；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
