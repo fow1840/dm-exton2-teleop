@@ -605,26 +605,28 @@
 详细执行步骤、输入文件、命令、交付物、安全门禁和验收标准统一见：
 [docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)。
 
-> 本节是 T31～T38 的任务状态唯一入口。任务细节见专项任务包和[自动采样方案](./docs/urdf-auto-sampling-plan.md)，任务须满足依赖方可执行。
+> 本节是 T31～T39 的任务状态唯一入口。任务细节见专项任务包和[自动采样方案](./docs/urdf-auto-sampling-plan.md)，任务须满足依赖方可执行。
 
 **当前最高优先级路径（2026-11-08）**：
 
-1. **P0-1 / T31 现场只读核验**：在机器人 ROS 主机或同一 ROS 2 局域网采集当前 ROS_DOMAIN_ID、节点、IK 运行参数、六个话题的 publisher/type/sample/rate 与 target/state frame_id；不连接控制器、不发运动命令。当前源码审计和采集器已合并，现场证据仍 BLOCKED。
-2. **P0-2 / T34 真机真实方向验证**：T31 通过、控制器协议/反馈/限位/停止行为核实、现场操作员明确批准后，先对一个左臂关节做五点试采（基准→正向→回基准→反向→回基准），验证后再逐轴扩展左臂七轴。T33 已完成离线加固，T32 报告已阅读。
-3. **冻结 T35 及后续修正**：在真实方向表出来前，不改 URDF axis、Bridge 收发符号、IK 映射或 TCP 补偿。
+1. **P0-1 / T39 CSV 候选模型离线验证**：以厂家 CSV 生成独立左臂候选 URDF，比较 W/C 的逐轴坐标、FK、历史 TCP 残差和相对旋转角；不连接真机、不修改生产模型。T39 与 T31 并行。
+2. **P0-1 / T31 现场只读核验**：在机器人 ROS 主机或同一 ROS 2 局域网采集当前 ROS_DOMAIN_ID、节点、IK 参数、六个话题的 publisher/type/sample/rate 与 target/state frame_id；不连接控制器、不发运动命令。源码审计和采集器已合并，现场证据仍 BLOCKED。
+3. **P0-2 / T34 真机真实方向验证**：T39 离线候选结果与 T31 现场 frame/反馈契约均可复核、T33 安全加固完成、控制器协议/反馈/限位/停止行为核实且现场操作员明确批准后，先做一个左臂关节五点试采，再逐轴扩展七轴。实测同时对照 W/C 的同姿态 Jacobian 预测。
+4. **冻结 T35 及后续修正**：在真实方向表出来前，不改生产 URDF axis、Bridge 收发符号、IK 映射或 TCP 补偿。
 
-T32 / T33 均已完成；当前执行瓶颈不是继续开发探针，而是 T31 现场只读证据和 T34 操作员批准的真机实测。
+T32 / T33 已完成；T39 是离线候选，不是实测模型；T31 现场数据仍 BLOCKED。
 
 | 编号 | 任务 | 优先级 | 状态 | 依赖 | 执行类型 | GitHub Issue |
 |---|---|---:|---|---|---|---|
 | T31 | [运行态参数与坐标系契约审计](./docs/T31运行态与坐标系审计.md) | P0-1（当前第一步） | BLOCKED（源码审计与只读采集器已完成；现场 ROS 运行态证据待采集） | 无 | 只读 / 不连接控制器 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) |
 | T32 | [左右臂 URDF / CSV 运动学离线对账](./docs/URDF左右臂关节轴离线审计.md) | P0 | DONE（2026-11-08：PR #17 已合并；独立离线回归 6/6 PASS；不代表真机方向已验证） | 无 | 离线只读 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) |
 | T33 | 自动采样探针加固与离线测试 | P0（首要实现） | DONE（2026-11-08：PR #11 已合并；离线 CI 21/21 PASS；不代表真机验证） | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
-| T34 | 左臂真实物理方向验证（先单关节五点试采，再扩七轴） | P0-2（当前首个真机任务） | BLOCKED（等待 T31 现场证据及当次操作员批准） | T31、T33；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
+| T34 | 左臂真实物理方向验证（先单关节五点试采，再扩七轴） | P0-2（当前首个真机任务） | BLOCKED（等待 T31、T39、当次操作员批准） | T31、T33、T39；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
 | T35 | 统一关节坐标转换契约并实施最小修正 | P0（冻结，等待真实方向表） | BLOCKED | T32、T34 | 代码 / 模型，部署另批 | [#6](https://github.com/fow1840/dm-exton2-teleop/issues/6) |
 | T36 | 左臂末端平移六方向标定 | P1 | BLOCKED | T31、T35；运动学门禁复核 | 录制 / 离线拟合 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) |
 | T37 | 姿态映射与低倍率端到端验收 | P1 | BLOCKED | T36 PASS | 真机，需操作员批准 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) |
-| T38 | 结案与交接资料更新 | P2 | BLOCKED | T31～T37 结论明确 | 文档 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) |
+| T38 | 结案与交接资料更新 | P2 | BLOCKED | T31～T37、T39 结论明确 | 文档 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) |
+| T39 | [CSV 候选 URDF 生成与离线对比](./docs/T39_CSV候选URDF生成与离线验证.md) | P0-1（离线开发，与 T31 并行） | DOING（GPT-6，2026-11-08：生成器、回归测试、两份隔离候选模型已提交分支；等待 CI） | T32；与 T31 并行 | 代码 / 离线，不连真机 | [#21](https://github.com/fow1840/dm-exton2-teleop/issues/21) |
 
 **证据边界（必须遵守）**：2026-11-06 的 9 包 / 4435 样本只证明 IK 指令与关节反馈的数值跟踪关系未见负相关；它不观测真实 TCP 的物理旋转方向。T32 的 CSV/URDF 世界轴反向仅是候选差异，也不等于真机物理方向已反。真实方向只能由现场实际关节反馈 + 实测 TCP 旋转，结合已核实的 base/TCP/frame 定义，与同一 URDF 姿态下的 Jacobian 预测对照得出；帧或反馈来源不清一律 UNCERTAIN / BLOCKED。
 
@@ -634,6 +636,6 @@ T32 / T33 均已完成；当前执行瓶颈不是继续开发探针，而是 T31
 - 领取 T31～T38 时，先在对应 Issue 评论中写 `[CLAIM] AI 标识 / 日期时间`；若已有 Assignee 或其他 AI 的有效认领，不得重复领取。权限允许时将自己设为 Assignee。
 - 认领成功后，将 Issue 标签改为 `status:in-progress`，并将本表状态改为 DOING、记录 AI 标识 / 日期。
 - 每个 AI 使用独立分支并提交 PR；不直接推 main。
-- T32 / T33 已 DONE；当前先完成 T31 现场只读核验，再进入 T34 真机单轴试采。T30 方向翻转表工作已并入 T34，禁止按旧命令或固定 +0.12rad 幅度执行。
+- T32 / T33 已 DONE；T39 为当前 P0 离线任务，与 T31 现场只读核验并行；两者证据齐备后再进入 T34 真机单轴试采。T30 方向翻转表工作已并入 T34，禁止按旧命令或固定 +0.12rad 幅度执行。
 - 真机任务未经现场操作员明确批准一律 BLOCKED；不得自行清故障、enable、改速度或绕过安全门禁。
 - DONE 必须附原始证据；推测必须标注未验证。
