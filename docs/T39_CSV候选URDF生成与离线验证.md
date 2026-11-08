@@ -76,6 +76,31 @@ python3 tools/tests/test_t39_csv_urdf_candidate.py -v
 - 直接 FK/TCP 位置与姿态残差在当前未验证绝对 frame 假设下，C 没有优于 W。
 - 结论：CSV 候选值得保留为诊断模型，但不能直接选为最终 URDF；必须结合 T31 和 T34 继续核验。
 
+## Pink IK 对比（与 FK 报告分开解读）
+
+工具：`tools/dm-exo/urdf_fk_calib/compare_pink_ik.py`。
+
+它使用项目当前算法栈（Pink 3.5.0 / Pinocchio 2.7.0），并复用 `ik_node.py` 的任务配置：
+
+- FrameTask：position cost 300、orientation cost 40；
+- PostureTask：cost 0.3；
+- DampingTask：cost 12；
+- OSQP，dt = 1/250 s。
+
+为避免把尚未核实的 controller TCP/frame 当成真值，IK 对比不直接把历史 tcp14 当目标。它从每个历史 q 计算 **W 模型的 Link7L FK 目标**，然后让 W 与 C 从同一个轻微扰动 seed 求解同一目标，记录最终位置/姿态残差、迭代数和关节解偏移。L01 因 J4L 超出当前模型限位而排除。
+
+这只能回答“两个模型的 Pink IK 对同一组 W 合成目标表现如何”，不能回答“哪个模型更接近真实机械臂”。它是离线求解器敏感性对照，不是物理方向或真机精度证明。
+
+运行：
+
+~~~bash
+python -m pip install -r ros2_ws/requirements.txt
+python tools/dm-exo/urdf_fk_calib/compare_pink_ik.py \
+  --baseline ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf \
+  --candidate tools/dm-exo/urdf_fk_calib/candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-kinematics-candidate-NOT_FOR_ROBOT.urdf \
+  --output tools/dm-exo/urdf_fk_calib/candidates/pink-ik-comparison.json
+~~~
+
 ## 离线报告如何解读
 
 报告包含：
