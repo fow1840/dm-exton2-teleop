@@ -1457,3 +1457,13 @@ average rate: 250.762
 - 证据：最后一笔台账提交 34d65a914dc6e74dffd64f81f3a5f1ba82e29fbd 对应 GitHub Actions run 42436933796，job t33-offline success；Ran 21 tests / OK；Pinocchio 安装、py_compile、git diff --check 全部成功。
 - 结论：协议梳理、采样方案、探针注释、回归测试、WORKLOG 和 TASKS 的最终分支快照均通过 CI。PR #11 保持 OPEN，未合并。
 - 现场变更：无。未连接控制器、未发送任何运动/使能/下使能/清故障命令。
+
+
+## 2026-11-08 | T33 离线实现合并 main，T34 继续保持 BLOCKED | GPT-6
+
+- PR #10（自动采样方案与任务优先级）已合并到 main，merge commit：e07b43c38ff22c3f58145bb14bdf661208946649。
+- PR #11（T33 自动采样探针、协议字段证据纠正、离线回归）先 retarget 到 main 后合并，merge commit：4404a45d2bbbeffbbb48b44ff173debf98613785。最终代码 commit：959dc3051c617d50ca55067d52aca6b46a726e6a。
+- 最终 PR 分支快照 GitHub Actions run 42437049804 / job t33-offline success：21/21 tests OK；Pinocchio FK replay、py_compile、git diff --check 通过。
+- T33 状态更新为 DONE，仅表示代码/离线验收完成。没有连接控制器、没有运行只读现场预检、没有发送 movej / stop_motion / enable_robot / disable_robot / clear_fault，也没有修改现场 URDF、Bridge 或 ROS 参数。
+- T34 仍为 BLOCKED：需先完成 T31 运行态只读审计、阅读 T32 离线对账结果，核实当前控制器 get_device_state 状态机（特别是运动期间是否返回 moving/busy）、反馈新鲜度/设备时间戳、MoveJ 回执与保持值、独立停止流程；操作员在场明确批准后，才可做左臂单关节五点试采。
+- 重要边界：当前探针在设备状态故障/缺失/未知时 fail-closed，并跳过自动 stop_motion，交由现场操作员按已验证的独立停止流程处置。不能把离线模拟测试通过解释为可直接启动真机。
