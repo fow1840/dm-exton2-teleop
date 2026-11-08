@@ -614,7 +614,7 @@
 3. **P0-2 / T34 真机真实方向验证**：T39 离线候选结果与 T31 现场 frame/反馈契约均可复核、T33 安全加固完成、控制器协议/反馈/限位/停止行为核实且现场操作员明确批准后，先做一个左臂关节五点试采，再逐轴扩展七轴。实测同时对照 W/C 的同姿态 Jacobian 预测。
 4. **冻结 T35 及后续修正**：在真实方向表出来前，不改生产 URDF axis、Bridge 收发符号、IK 映射或 TCP 补偿。
 
-T32 / T33 已完成；T39 是离线候选，不是实测模型；T31 现场数据仍 BLOCKED。
+T32 / T33 已完成；T39 离线实现与对比验收已完成（PR #22 待 review/merge），CSV 候选不是实测模型；T31 现场数据仍 BLOCKED。
 
 | 编号 | 任务 | 优先级 | 状态 | 依赖 | 执行类型 | GitHub Issue |
 |---|---|---:|---|---|---|---|
@@ -626,7 +626,7 @@ T32 / T33 已完成；T39 是离线候选，不是实测模型；T31 现场数�
 | T36 | 左臂末端平移六方向标定 | P1 | BLOCKED | T31、T35；运动学门禁复核 | 录制 / 离线拟合 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) |
 | T37 | 姿态映射与低倍率端到端验收 | P1 | BLOCKED | T36 PASS | 真机，需操作员批准 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) |
 | T38 | 结案与交接资料更新 | P2 | BLOCKED | T31～T37、T39 结论明确 | 文档 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) |
-| T39 | [CSV 候选 URDF 生成与离线对比](./docs/T39_CSV候选URDF生成与离线验证.md) | P0-1（离线开发，与 T31 并行） | DOING（PR #22 已开；T39 15/15、Pink IK 2/2、T32 6/6 PASS；Pink W 6/6 收敛、C 0/6；待审查/合并） | T32；与 T31 并行 | 代码 / 离线，不连真机 | [#21](https://github.com/fow1840/dm-exton2-teleop/issues/21) |
+| T39 | [CSV 候选 URDF 生成与离线对比](./docs/T39_CSV候选URDF生成与离线验证.md) | P0-1（离线开发，与 T31 并行） | DOING（离线实现与验收完成：T39 18/18、Pink IK 2/2、T32 6/6 PASS；PR #22 OPEN，待 review/merge） | T32；与 T31 并行 | 代码 / 离线，不连真机 | [#21](https://github.com/fow1840/dm-exton2-teleop/issues/21) |
 
 **证据边界（必须遵守）**：2026-11-06 的 9 包 / 4435 样本只证明 IK 指令与关节反馈的数值跟踪关系未见负相关；它不观测真实 TCP 的物理旋转方向。T32 的 CSV/URDF 世界轴反向仅是候选差异，也不等于真机物理方向已反。真实方向只能由现场实际关节反馈 + 实测 TCP 旋转，结合已核实的 base/TCP/frame 定义，与同一 URDF 姿态下的 Jacobian 预测对照得出；帧或反馈来源不清一律 UNCERTAIN / BLOCKED。
 
