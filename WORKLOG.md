@@ -1589,3 +1589,13 @@ average rate: 250.762
 - 完整 Pink IK 对照 CLI 再次成功：W 6/6 收敛（位置/姿态中位 0.115 mm / 0.059°）；C 0/6 收敛（206.314 mm / 70.315°）。
 - 代码与文档已推到 PR #22；PR 仍 OPEN、mergeable，尚未合并 main。T39 任务维持 DOING，等待 review/merge。
 - 现场变更：无。
+
+
+## 2026-11-08 | T39 最终回归加固与 PR 分支 CI 复验 | GPT-6
+
+- 回归补强：将重复 Joint Name 与重复 Link Name 分开测试；新增 child link mismatch 和非 revolute joint 拒绝用例。当前 T39 测试共 18 项，覆盖候选可重复生成、只改七个左臂 joint origin/axis、右臂与 fixed mount 不变、限位保留、CSV 零限位不导入、visual-frame 诊断变体、缺行/重复行/错误 parent/child/type/零轴/非有限数拒绝，以及历史样本统计可复现。
+- 最新完整 GitHub Actions：T39 run 42471870514 / job 128704284047 success；T39 18/18、T32 6/6、Pink IK 2/2 PASS。候选生成、完整 Pink W/C 比较、Python 编译与 git diff --check 均通过。此前 Python 3.10 下载曾遇到一次 HTTP 504，重试成功；没有测试断言失败。
+- 离线结论：11 条历史记录去重为 7 个左臂姿态。21 对全样本相对旋转角误差，W 中位数/最大值 23.94°/140.37°，C 为 29.52°/75.80°；排除 L01 后 15 对，W 为 23.94°/140.37°，C 为 20.10°/75.80°。绝对 FK/TCP 残差在未核实 base/TCP frame 假设下未改善。
+- Pink 合成目标对照：W 6/6 收敛，位置/姿态中位误差 0.115 mm/0.059°；C 0/6 收敛，206.314 mm/70.315°，均达到 400 次迭代上限。目标由 W FK 合成，不是真机 ground truth，只证明共同 frame 假设下 W/C 模型差异显著。
+- 结论：CSV 候选保留为离线诊断模型，不作为最终真机 URDF；不修改生产模型、Bridge、IK 或 ROS 参数。PR #22 OPEN、未合并，等待 review/merge；T31 现场只读核验仍 BLOCKED，T34 仍需现场操作员批准，T35 继续冻结。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动现场节点、未发送运动命令、未修改生产 URDF / Bridge / IK / ROS 参数。
