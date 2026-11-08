@@ -212,7 +212,7 @@ J7 在限位外时控制器是否拒绝 movej 未验证；若 5Hz 后仍偶发�
 
 任务总说明：[docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)
 
-**当前第一优先级（2026-11-08）**：先执行 T31 现场 ROS 只读采集；现场证据通过后，在操作员明确批准下执行 T34 左臂真实物理方向验证（先单关节五点，再逐轴扩展）。T32/T33 已完成。T30 历史翻转表任务并入 T34；旧版直接执行命令和固定 +0.12rad 幅度废止。真实方向表完成前，T35 及所有 URDF / Bridge / IK 符号修正保持冻结。
+**当前第一优先级（2026-11-08）**：T39 CSV 候选 URDF 离线生成/对比与 T31 现场 ROS 只读采集并行；两者结果可复核后，在控制器协议/限位/反馈/停止行为核实且操作员明确批准下执行 T34 左臂真实物理方向验证（先单关节五点，再逐轴扩展）。T32/T33 已完成。T30 历史翻转表任务并入 T34；旧版直接执行命令和固定 +0.12rad 幅度废止。CSV 候选不是实测真机模型；真实方向表完成前，T35 及生产 URDF / Bridge / IK 符号修正保持冻结。
 
 任务台账：[TASKS.md](./TASKS.md)（唯一权威状态）；GitHub Issues 用于领取、讨论、依赖交叉引用和 PR 关联。
 
@@ -226,6 +226,7 @@ J7 在限位外时控制器是否拒绝 movej 未验证；若 5Hz 后仍偶发�
 | T36 左臂末端平移六方向标定 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) | `status:blocked` |
 | T37 姿态映射与低倍率端到端验收 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) | `status:blocked` |
 | T38 结案与交接资料更新 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) | `status:blocked` |
+| T39 CSV 候选 URDF 生成与离线对比 | [#21](https://github.com/fow1840/dm-exton2-teleop/issues/21) | `status:in-progress`（离线生成器/测试/候选文件已提交分支，CI 待验） |
 
 ### AI 领取步骤
 
