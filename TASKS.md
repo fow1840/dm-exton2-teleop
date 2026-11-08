@@ -617,7 +617,7 @@
 |---|---|---:|---|---|---|---|
 | T31 | 运行态参数与坐标系契约审计 | P0 | TODO | 无 | 只读 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) |
 | T32 | 左右臂 URDF / CSV 运动学离线对账 | P0 | TODO | 无 | 离线只读 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) |
-| T33 | 自动采样探针加固与离线测试 | P0（首要实现） | DOING（GPT-6，2026-11-08：协议字段证据补齐；fail-closed 保持；CI 21/21 PASS，待 PR 审核/合并） | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
+| T33 | 自动采样探针加固与离线测试 | P0（首要实现） | DOING（GPT-6，2026-11-08：协议字段证据补齐；fail-closed 保持；CI 21/21 PASS，run 42436933796，待 PR 审核/合并） | 无 | 代码 / 离线 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) |
 | T34 | 左臂自动采样与逐轴验证（先单关节试采） | P0（首个真机） | BLOCKED | T31、T33；阅读 T32 | 真机，需操作员批准 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) |
 | T35 | 统一关节坐标转换契约并实施最小修正 | P0 | BLOCKED | T32、T34 | 代码 / 模型，部署另批 | [#6](https://github.com/fow1840/dm-exton2-teleop/issues/6) |
 | T36 | 左臂末端平移六方向标定 | P1 | BLOCKED | T31、T35；运动学门禁复核 | 录制 / 离线拟合 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) |
