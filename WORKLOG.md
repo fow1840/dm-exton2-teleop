@@ -1570,3 +1570,13 @@ average rate: 250.762
 - 详细报告：docs/T39_CSV候选URDF离线对比结果_20261108.md。
 - 当前门禁：T31 现场 frame/反馈只读核验仍待现场；T34 真机五点方向验证仍 BLOCKED。T35 保持冻结。
 - 现场变更：无。未连接 ROS 主机或控制器、未启动现场进程、未发送运动命令、未修改生产 URDF / Bridge / IK / ROS 参数。
+
+
+## 2026-11-08 | T39 Pink IK 对照完成 | GPT-6
+
+- 新增 tools/dm-exo/urdf_fk_calib/compare_pink_ik.py：使用项目 Pink 3.5.0 / Pinocchio 2.7.0 / OSQP 与 ik_node 相同的 FrameTask(300/40)、PostureTask(0.3)、DampingTask(12)、dt=1/250s。
+- 对 6 个不越限历史姿态，以 W 在记录 q 上的 Link7L FK 作为合成目标，W/C 使用相同轻微扰动 seed 分别求解；L01 因 J4L 越过当前限位排除。
+- CI Pink 对照：W 6/6 收敛，位置/姿态中位误差 0.115mm/0.059°，中位迭代 1；CSV 候选 C 0/6 收敛，位置/姿态中位误差 206.314mm/70.315°，迭代均达到 400 上限。
+- 解释边界：目标由 W FK 合成，不是控制器 TCP 或外部测量。结果证明在当前共同 base/frame 假设下 W/C 运动学差异大，C 不能复现 W 合成目标；不证明 W 就是真机正确模型。若 CSV 的 base/link frame 需要固定变换，T31 必须先核实。
+- T39 workflow run 42458107051 首次包含 Pink stack，当前 run success；测试与完整 Pink 比较命令均执行成功。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动现场 IK/Bridge、未发送运动命令、未修改生产 URDF / ROS 参数。
