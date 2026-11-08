@@ -1,0 +1,131 @@
+# T39：基于厂家 CSV 生成左臂候选 URDF
+
+## 目标与边界
+
+以 SolidWorks 导出的 CSV 为基准，生成一份**独立、不可部署**的左臂候选 URDF（C），与当前工作区 URDF（W）比较。它用于验证“CSV 左臂坐标定义是否比当前镜像修复版更符合已有数据”，不预设 CSV 等于控制器 D-H，也不替代真机方向验证。
+
+T39 是离线任务，可与 T31 现场 ROS 只读采集并行。T34 仍需 T31 通过、T39 候选模型可复核、控制器协议/反馈/限位/停止行为核实，以及现场操作员明确批准。
+
+## 已知输入
+
+- W：`ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf`
+- CSV：`ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.csv`
+- 离线审计：`docs/URDF左右臂关节轴离线审计.md`
+- 历史样本：`tools/dm-exo/urdf_fk_calib/data/calib_samples_L_1106_0943.jsonl`、`calib_L_drive.jsonl`、`calib_L2_drive.jsonl`
+
+T32 证据：四份 URDF 的 14 个机械臂关节运动学字段相同；CSV 左臂 J2L/J3L/J4L/J6L 的统一 base_link 轴向与 W 相反。CSV 的关节限位字段为 0，不能导入候选模型。
+
+## 生成器
+
+`tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py`
+
+默认只替换 Joint1L～Joint7L 的：
+
+- `origin xyz`
+- `origin rpy`
+- `axis xyz`（归一化）
+
+以下内容全部保留自 W：
+
+- 右臂全部关节；
+- 左右臂现有 lower / upper / velocity / effort 限位；
+- `base_link_to_base` 固定安装变换；
+- links、visual、collision、inertial、mesh URI。
+
+可选 `--link-frames csv` 只生成一份额外的**显示诊断变体**：把左侧 Link1L～Link7L 的 visual/collision origin 改为 CSV 值，mesh URI 和 inertial 仍保留 W。该变体仅帮助判断 CAD 导出 link frame 与当前显示 frame 的关系，不参与 FK 差异结论。
+
+生成器会拒绝缺失/重复关节行、错误 parent/child、非 revolute 关节、零轴、非有限值，以及不含 `candidate` 和 `NOT_FOR_ROBOT` 的输出文件名。它不会连接控制器、发 ROS 消息或修改生产 URDF。
+
+## Ubuntu 22 / Python 3.10 离线运行
+
+在仓库根目录：
+
+~~~bash
+python3 tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py
+~~~
+
+默认输出：
+
+- `tools/dm-exo/urdf_fk_calib/candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-kinematics-candidate-NOT_FOR_ROBOT.urdf`
+- `tools/dm-exo/urdf_fk_calib/candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-candidate-report.json`
+
+生成 CSV visual-frame 诊断变体：
+
+~~~bash
+python3 tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py \
+  --link-frames csv \
+  --output tools/dm-exo/urdf_fk_calib/candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-visual-candidate-NOT_FOR_ROBOT.urdf \
+  --report tools/dm-exo/urdf_fk_calib/candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-visual-report.json
+~~~
+
+测试：
+
+~~~bash
+python3 tools/tests/test_t32_urdf_csv_audit.py -v
+python3 tools/tests/test_t39_csv_urdf_candidate.py -v
+~~~
+
+## 离线报告如何解读
+
+报告包含：
+
+1. W / C / CSV SHA256；
+2. 左臂逐关节 origin 差异、local/world axis 和轴向 dot；
+3. 左臂限位保留、右臂不变、base 固定安装不变检查；
+4. 所有历史样本去重后的 W/C 对控制器 TCP 直接位置/姿态残差；
+5. 相对旋转角差异（对固定 base rotation 和固定 tool rotation 不变），分别报告全部样本与排除异常 L01 后的结果。
+
+**证据限制**：
+
+- 历史 `tcp14` 是控制器报告的 TCP，不是独立外部测量；
+- `base_link` 与控制器 base 相同、`Link7L` 与 TCP 相同、关节顺序和符号直接匹配，均是待 T31 核实的假设；
+- 直接位置/姿态残差在绝对 frame / tool 未核实时只能作线索；
+- 相对旋转角误差可消除固定 base/tool 旋转影响，但仍依赖样本的 q 与 TCP 配对正确；
+- CSV 模型是 CAD 假设，不是真机 D-H 证明。
+
+已有 T32 的初步相对旋转角对比：全样本 21 对时 W 中位数/最大值约 23.94°/140.37°，CSV 约 29.52°/75.80°；排除 L01 后 W 约 23.94°/140.37°，CSV 约 20.10°/75.80°。这只说明 CSV 候选在某些子集上更好、某些指标上并非全面更好，T39 脚本会重新生成可复现报告。
+
+## RViz 隔离预览（不连接真机）
+
+先确保候选模型与网格包已在本地工作区可解析。三个终端都使用隔离 ROS 域，避免加入现场机器人正在使用的 ROS_DOMAIN_ID：
+
+~~~bash
+source /opt/ros/humble/setup.bash
+source ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=97
+export ROS_LOCALHOST_ONLY=1
+MODEL="$PWD/tools/dm-exo/urdf_fk_calib/candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-kinematics-candidate-NOT_FOR_ROBOT.urdf"
+~~~
+
+终端 1，启动独立 robot_state_publisher：
+
+~~~bash
+ros2 run robot_state_publisher robot_state_publisher --ros-args \
+  -p robot_description:="$(cat "$MODEL")"
+~~~
+
+终端 2，启动关节滑块（仅发布本地 joint_states）：
+
+~~~bash
+ros2 run joint_state_publisher_gui joint_state_publisher_gui --ros-args \
+  -p robot_description:="$(cat "$MODEL")"
+~~~
+
+终端 3：
+
+~~~bash
+rviz2
+~~~
+
+在 RViz 添加 RobotModel，Fixed Frame 设为 `base_link`。需要看 CSV visual-frame 变体时，只替换 MODEL 路径并重新启动这三个本地进程。
+
+**禁止**在此预览流程中启动 exton_bridge、IK、Puppetry、MessageBridge，或连接 TCP 30485。不要将候选文件复制到生产 URDF 路径，不要用它驱动真机。
+
+## 与 T31 / T34 的关系
+
+- T39：离线生成 W/C 并对比历史样本。
+- T31：并行核实当前 ROS 运行态、frame_id、反馈发布源和控制器坐标约定。
+- T34：两者准备完成后，在现场批准下做真实关节方向五点试采。采集到的实际关节角变化与实测 TCP 旋转分别对照 W/C 的同姿态 Jacobian 预测。
+- T35：只有 T34 结果可复核后，才建立唯一关节坐标转换方案。
+
+无论 CSV 候选离线指标是否更好，T34 的真机方向验证都不能跳过。
