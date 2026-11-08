@@ -18,8 +18,8 @@ class T39PinkIkComparisonTests(unittest.TestCase):
             [compare_pink_ik.candidate.SAMPLE_FILES[0]],
             max_iter=120,
         )
-        self.assertEqual(report["summary"]["baseline_W"]["sample_count"], 2)
-        self.assertEqual(report["summary"]["csv_candidate_C"]["sample_count"], 2)
+        self.assertEqual(report["summary"]["baseline_W"]["sample_count"], 1)
+        self.assertEqual(report["summary"]["csv_candidate_C"]["sample_count"], 1)
         self.assertIn("W FK", report["targets"])
         for model_name in ("baseline_W", "csv_candidate_C"):
             summary = report["summary"][model_name]
