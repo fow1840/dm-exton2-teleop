@@ -609,8 +609,8 @@
 
 **当前最高优先级路径（2026-11-08）**：
 
-1. **P0-1 / T39 CSV 候选模型离线验证**：以厂家 CSV 生成独立左臂候选 URDF，比较 W/C 的逐轴坐标、FK、历史 TCP 残差和相对旋转角；不连接真机、不修改生产模型。T39 与 T31 并行。
-2. **P0-1 / T31 现场只读核验**：在机器人 ROS 主机或同一 ROS 2 局域网采集当前 ROS_DOMAIN_ID、节点、IK 参数、六个话题的 publisher/type/sample/rate 与 target/state frame_id；不连接控制器、不发运动命令。源码审计和采集器已合并，现场证据仍 BLOCKED。
+1. **P0-1 / T31 现场只读核验（当前现场第一步）**：在机器人 ROS 主机或同一 ROS 2 局域网采集当前 ROS_DOMAIN_ID、节点、IK 参数、六个话题的 publisher/type/sample/rate 与 target/state frame_id；不连接控制器、不发运动命令。源码审计和采集器已合并，现场证据仍 BLOCKED。
+2. **P0-1 / T39 CSV 候选模型离线验证（实现与离线验收已完成）**：厂家 CSV 候选生成、W/C FK/历史样本/Pink 对照及文档已完成；CI 18/18 + Pink 2/2 + T32 6/6 PASS。PR #22 OPEN，待 review/merge；不连接真机、不修改生产模型。
 3. **P0-2 / T34 真机真实方向验证**：T39 离线候选结果与 T31 现场 frame/反馈契约均可复核、T33 安全加固完成、控制器协议/反馈/限位/停止行为核实且现场操作员明确批准后，先做一个左臂关节五点试采，再逐轴扩展七轴。实测同时对照 W/C 的同姿态 Jacobian 预测。
 4. **冻结 T35 及后续修正**：在真实方向表出来前，不改生产 URDF axis、Bridge 收发符号、IK 映射或 TCP 补偿。
 
