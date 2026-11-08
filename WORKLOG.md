@@ -1486,3 +1486,31 @@ average rate: 250.762
 - 结论：T32 离线文件对账、关节轴候选方向与历史样本 FK 报告已完成并可复现。左臂 CSV 与当前 W URDF 的 J2L/J3L/J4L/J6L 轴向候选相反；不据此直接修改 URDF 或 Bridge。
 - 真机边界：T32 不证明真实物理正方向、零位、base/TCP 或当前交付实物与 CSV 一致；这些仍由 T31 现场只读证据和 T34 经操作员批准的单轴试采验证。
 - 现场变更：无。未连接控制器、未发送运动命令、未修改 URDF / CSV / Bridge / ROS 参数。
+
+
+## 2026-11-08 | T31 源码契约复核与只读采集器接手 | GPT-6
+
+- 动作：按 AGENTS.md 接手流程复核 HANDOFF.md、TASKS.md T29/T30、现场调试手册、IK/FK launch、IK target_cb、FK adapter 和 Bridge 反馈发布路径；复用并加强 PR #13 的只读 ROS 采集器与 fake ROS CLI 回归。
+- 源码证据：IK launch 默认 root/ref frame 均为 base_link，目标末端为右 Link7 / 左 Link7L；target_cb 读取 PoseStamped 的位置与 XYZW 四元数，但不读取 header.frame_id、不做 TF 变换，因此上游 target 必须已处于 IK 的 base_link 解释坐标约定。FK adapter 默认 base_frame=base_link，左右末端分别 Link7L/Link7；Bridge 发布 JointState 时 stamp 为本机 ROS 当前时间、frame_id=base_link、关节名顺序为右七轴再左七轴；若 TCP 反馈快照为空，会回退到指令缓存，消息时间戳不等于设备采样时间戳。
+- 状态语义：/target_robot/{left,right}_ee/state 由 FK adapter 与 IK 都声明发布端；FK 在任一侧 clutch 按下时按 yield_when_clutch 默认抑制双侧状态，IK 在 publish_commanded_ee_state=true 且 clutch 活跃时可能发布命令 FK 状态。必须结合运行态参数、topic info 和样本来源判断，不能仅凭 topic 名把该话题认作真机实测末端。
+- 现场证据：尚未取得现场 ROS_DOMAIN_ID、运行节点、IK 参数、六话题 publisher/type/sample/rate 和 target/state frame_id；现场 SSH 隧道仅能在同一局域网使用，本轮没有远程 ROS 主机访问能力。
+- 验证：PR #13 原始分支 CI run 42388058353 success（fake ROS CLI 3 项测试）；本轮增加对六话题全部 info/sample/rate、必需参数读取、frame_id 样本保留和只读命令白名单的断言，等待新 PR CI。
+- 结论：源码契约与只读采集工具已准备；T31 仍 BLOCKED，必须在现场 ROS 主机或同一 ROS 2 局域网执行采集。未把历史 2026-11-06 参数日志当作当前运行态。
+- 现场变更：无。未连接控制器、未发运动命令、未写 ROS 参数、未重启任何进程。
+
+
+
+## 2026-11-08 | T31 离线采集器复核 CI 通过，现场证据仍阻塞 | GPT-6
+
+- PR #18 已从当前 main 基线重新整理；GitHub Actions run 42444769137 / job t31-offline success，3/3 测试通过。回归覆盖 53 次有界只读命令、六个话题各自 info/sample/rate、14 项关键 IK 参数、frame_id 样本保留、私有目录权限、缺少 ROS_DOMAIN_ID fail-fast，以及禁止 param set / service / action / movej / stop_motion。
+- 同一 PR 的 T33 回归 run 42444769155 success，21/21 PASS；T32 PR #17 已合并 main，6/6 独立 FK / CSV / 世界轴测试通过（run 42444767231）。
+- 结论：T31 的源码审计和只读采集工具已可合并；现场参数、发布端、消息频率和 target/state frame_id 尚未采集，T31 继续 BLOCKED。不能把 fake ROS CLI 或历史日志当成当前现场证据。
+- 现场变更：无。未连接 ROS 主机或控制器、未发送运动命令、未写参数、未重启进程。
+
+
+## 2026-11-08 | T31 离线采集器复核 CI 通过，现场证据仍阻塞 | GPT-6
+
+- PR #18 已从当前 main 基线重新整理；GitHub Actions run 42444769137 / job t31-offline success，3/3 测试通过。回归覆盖 53 次有界只读命令、六个话题各自 info/sample/rate、14 项关键 IK 参数、frame_id 样本保留、私有目录权限、缺少 ROS_DOMAIN_ID fail-fast，以及禁止 param set / service / action / movej / stop_motion。
+- 同一 PR 的 T33 回归 run 42444769155 success，21/21 PASS；T32 PR #17 已合并 main，6/6 独立 FK / CSV / 世界轴测试通过（run 42444767231）。
+- 结论：T31 的源码审计和只读采集工具已可合并；现场参数、发布端、消息频率和 target/state frame_id 尚未采集，T31 继续 BLOCKED。不能把 fake ROS CLI 或历史日志当成当前现场证据。
+- 现场变更：无。未连接 ROS 主机或控制器、未发送运动命令、未写参数、未重启进程。

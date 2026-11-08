@@ -1,0 +1,29 @@
+name: T31 read-only audit tests
+
+on:
+  push:
+    branches:
+      - codex/t31-runtime-frame-audit
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  t31-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Test read-only audit collector with fake ROS CLI
+        run: python tools/tests/test_t31_readonly_audit.py -v
+      - name: Check shell syntax
+        run: bash -n tools/dm-exo/t31_readonly_audit.sh
+      - name: Check patch whitespace
+        run: git diff --check
