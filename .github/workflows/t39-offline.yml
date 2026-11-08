@@ -1,0 +1,49 @@
+name: T39 CSV-derived URDF candidate tests
+
+on:
+  push:
+    branches:
+      - gpt6/t39-csv-urdf-candidate-20261108
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  t39-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Run T32 source audit
+        run: python tools/tests/test_t32_urdf_csv_audit.py -v
+      - name: Run T39 candidate regression tests
+        run: python tools/tests/test_t39_csv_urdf_candidate.py -v
+      - name: Generate an isolated candidate and report
+        run: |
+          python tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py \
+            --output /tmp/left-candidate-NOT_FOR_ROBOT.urdf \
+            --report /tmp/left-candidate-report.json
+          test -s /tmp/left-candidate-NOT_FOR_ROBOT.urdf
+          test -s /tmp/left-candidate-report.json
+      - name: Install the project's pinned Pinocchio and Pink stack
+        run: python -m pip install "numpy<2" "pin==2.7.0" "pin-pink==3.5.0" "qpsolvers==4.8.2" "osqp==1.0.5"
+      - name: Run Pink IK comparison regression tests
+        run: python tools/tests/test_t39_pink_ik_compare.py -v
+      - name: Compare Pink IK behavior under W and CSV candidate
+        run: |
+          python tools/dm-exo/urdf_fk_calib/compare_pink_ik.py \
+            --baseline ros2_ws/src/hr_up_7dof_fixed/urdf/HR-UP-7DOF-3KG-R-B01382-URDF-1029.urdf \
+            --candidate /tmp/left-candidate-NOT_FOR_ROBOT.urdf \
+            --output /tmp/pink-ik-report.json
+          test -s /tmp/pink-ik-report.json
+      - name: Compile T39 code
+        run: python -m py_compile tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py tools/dm-exo/urdf_fk_calib/compare_pink_ik.py tools/tests/test_t39_csv_urdf_candidate.py tools/tests/test_t39_pink_ik_compare.py
+      - name: Check patch whitespace
+        run: git diff --check

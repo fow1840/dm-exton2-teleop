@@ -10,12 +10,12 @@
 
 | 顺序 | 任务 | 范围 | 启动条件 |
 |---|---|---|---|
+| 1 / P0-1 | [T39 · #21](https://github.com/fow1840/dm-exton2-teleop/issues/21) · CSV 左臂候选 URDF 与离线比较 | 生成独立候选，比较逐关节坐标、FK、历史 TCP 相对旋转残差；不连接真机 | T32 已完成；离线开发，与 T31 并行 |
 | 1 / P0-1 | [T31 · #2](https://github.com/fow1840/dm-exton2-teleop/issues/2) · 现场只读核验 | 当前 ROS_DOMAIN_ID、运行节点/参数、六话题 publisher/type/sample/rate、target/state frame_id；不连接控制器、不运动 | 在机器人 ROS 主机或同一 ROS 2 局域网执行只读采集器 |
-| 2 / P0-2 | [T34 · #5](https://github.com/fow1840/dm-exton2-teleop/issues/5) · 真机真实方向验证 | 先一个左臂关节五点试采，再按批准范围扩展七轴 | T31 PASS、T33 离线验收完成、T32 报告已阅读、控制器协议/限位/反馈/停止行为核实、现场操作员明确批准 |
-| HOLD | T35 及后续 | 暂不修改 URDF / Bridge / IK 映射；方向表完成后再确定唯一转换方案 | T34 有可复核实测结果并经复核 |
+| 2 / P0-2 | [T34 · #5](https://github.com/fow1840/dm-exton2-teleop/issues/5) · 真机真实方向验证 | 先一个左臂关节五点试采，再按批准范围扩展七轴，并对照 W/C 模型预测 | T31 与 T39 可复核、T33 离线验收完成、T32 报告已阅读、控制器协议/限位/反馈/停止行为核实、现场操作员明确批准 |
+| HOLD | T35 及后续 | 暂不修改生产 URDF / Bridge / IK 映射；方向表完成后再确定唯一转换方案 | T34 有可复核实测结果并经复核 |
 
-T32（URDF/CSV 离线对账）与 T33（探针安全加固）已完成，不再重复开发。T30 的历史真机翻转表工作已并入 T34；旧版直接执行命令和固定 `+0.12rad` 幅度已废止。任务领取及状态见 [TASKS.md](../TASKS.md)。
-
+T32（URDF/CSV 离线对账）与 T33（探针安全加固）已完成。T39 只生成诊断候选，不是实测模型。T30 的历史真机翻转表工作已并入 T34；旧版直接运行命令和固定 +0.12rad 幅度已废止。任务领取及状态见 [TASKS.md](../TASKS.md)。
 ## T33 离线实现
 
 - 复用 `tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py`。默认只预演，不建立控制器连接。上机入口必须显式选择并绑定操作员批准的计划。

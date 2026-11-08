@@ -1,0 +1,253 @@
+"""Offline regression tests for T39 CSV-derived left-arm URDF candidates."""
+import copy
+import csv
+from pathlib import Path
+import tempfile
+import unittest
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[2]
+MODULE_DIR = ROOT / "tools/dm-exo/urdf_fk_calib"
+import sys
+sys.path.insert(0, str(MODULE_DIR))
+
+import audit_urdf_csv as audit
+import csv_urdf_candidate as candidate
+
+
+def _semantic_xml(element):
+    clone = copy.deepcopy(element)
+    for node in clone.iter():
+        if node.text is not None and not node.text.strip():
+            node.text = None
+        node.tail = None
+    return ET.tostring(clone, encoding="unicode")
+
+
+class T39CsvUrdfCandidateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = candidate.DEFAULT_URDF
+        cls.csv_path = candidate.DEFAULT_CSV
+        cls.source_sha = candidate._sha256(cls.source)
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.temp_path = Path(cls.temp.name)
+        cls.candidate_path = cls.temp_path / "left-candidate-NOT_FOR_ROBOT.urdf"
+        cls.generated = candidate.generate_candidate(
+            cls.source, cls.csv_path, cls.candidate_path, link_frames="preserve"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def _write_modified_csv(self, mutate, filename):
+        with self.csv_path.open("r", encoding="utf-8-sig", newline="") as stream:
+            reader = csv.DictReader(stream)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+        mutate(rows)
+        path = self.temp_path / filename
+        with path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
+
+    def test_candidate_is_deterministic_and_never_changes_source(self):
+        second = self.temp_path / "second-candidate-NOT_FOR_ROBOT.urdf"
+        candidate.generate_candidate(self.source, self.csv_path, second)
+        self.assertEqual(self.candidate_path.read_bytes(), second.read_bytes())
+        self.assertEqual(candidate._sha256(self.source), self.source_sha)
+        self.assertFalse(self.generated["robot_deployment_allowed"])
+
+    def test_only_seven_left_joint_origins_and_axes_are_replaced(self):
+        baseline = audit.parse_urdf(self.source)
+        generated = audit.parse_urdf(self.candidate_path)
+        csv_joints, _ = candidate._read_csv_rows(self.csv_path)
+        self.assertEqual(set(candidate.LEFT_JOINTS), set(name for name in generated if name.endswith("L")))
+        for name in baseline:
+            if name in candidate.LEFT_JOINTS:
+                expected = candidate._csv_joint_values(csv_joints[name], name)
+                for field in ("xyz", "rpy", "axis"):
+                    for actual, wanted in zip(generated[name][field], expected[field]):
+                        self.assertAlmostEqual(actual, wanted, places=10)
+            else:
+                self.assertEqual(generated[name], baseline[name])
+
+    def test_all_left_limits_are_preserved_not_imported_from_zero_csv_fields(self):
+        baseline = audit.parse_urdf(self.source)
+        generated = audit.parse_urdf(self.candidate_path)
+        csv_joints, _ = candidate._read_csv_rows(self.csv_path)
+        for name in candidate.LEFT_JOINTS:
+            self.assertEqual(generated[name]["limit"], baseline[name]["limit"])
+            self.assertTrue(all(float(csv_joints[name]["Limit " + key.capitalize()] or 0) == 0 for key in candidate.LIMIT_FIELDS))
+
+    def test_default_candidate_preserves_link_geometry_and_inertial_frames(self):
+        baseline_root = ET.parse(self.source).getroot()
+        candidate_root = ET.parse(self.candidate_path).getroot()
+        baseline_links = {x.attrib["name"]: x for x in baseline_root.findall("link")}
+        candidate_links = {x.attrib["name"]: x for x in candidate_root.findall("link")}
+        for name in candidate.LEFT_LINKS:
+            self.assertEqual(
+                _semantic_xml(baseline_links[name]),
+                _semantic_xml(candidate_links[name]),
+            )
+
+    def test_optional_csv_visual_frame_variant_changes_only_visual_collision_origins(self):
+        path = self.temp_path / "left-visual-candidate-NOT_FOR_ROBOT.urdf"
+        candidate.generate_candidate(self.source, self.csv_path, path, link_frames="csv")
+        baseline_root = ET.parse(self.source).getroot()
+        candidate_root = ET.parse(path).getroot()
+        baseline_links = {x.attrib["name"]: x for x in baseline_root.findall("link")}
+        candidate_links = {x.attrib["name"]: x for x in candidate_root.findall("link")}
+        for name in candidate.LEFT_LINKS:
+            before, after = baseline_links[name], candidate_links[name]
+            self.assertEqual(_semantic_xml(before.find("inertial")), _semantic_xml(after.find("inertial")))
+            for tag in ("visual", "collision"):
+                self.assertEqual(
+                    before.find(tag).find("geometry").find("mesh").attrib,
+                    after.find(tag).find("geometry").find("mesh").attrib,
+                )
+        self.assertEqual(candidate._sha256(self.source), self.source_sha)
+
+    def test_checked_in_candidate_urdfs_are_parseable_and_match_csv(self):
+        kinematics_path = MODULE_DIR / "candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-kinematics-candidate-NOT_FOR_ROBOT.urdf"
+        visual_path = MODULE_DIR / "candidates/HR-UP-7DOF-3KG-R-B01382-CSV-left-visual-candidate-NOT_FOR_ROBOT.urdf"
+        csv_joints, csv_links = candidate._read_csv_rows(self.csv_path)
+        for path in (kinematics_path, visual_path):
+            root = ET.parse(path).getroot()
+            self.assertIn("NOT_FOR_ROBOT", root.attrib["name"])
+            parsed = audit.parse_urdf(path)
+            baseline = audit.parse_urdf(self.source)
+            for name in candidate.LEFT_JOINTS:
+                expected = candidate._csv_joint_values(csv_joints[name], name)
+                for field in ("xyz", "rpy", "axis"):
+                    for actual, wanted in zip(parsed[name][field], expected[field]):
+                        self.assertAlmostEqual(actual, wanted, places=9)
+                self.assertEqual(parsed[name]["limit"], baseline[name]["limit"])
+            for name in candidate.RIGHT_JOINTS:
+                self.assertEqual(parsed[name], baseline[name])
+            self.assertEqual(parsed["base_link_to_base"], baseline["base_link_to_base"])
+        visual_root = ET.parse(visual_path).getroot()
+        visual_links = {element.attrib["name"]: element for element in visual_root.findall("link")}
+        for name in candidate.LEFT_LINKS:
+            row = csv_links[name]
+            for tag, prefix in (("visual", "Visual"), ("collision", "Collision")):
+                origin = visual_links[name].find(tag).find("origin")
+                expected_xyz = [float(row[prefix + " " + axis]) for axis in ("X", "Y", "Z")]
+                expected_rpy = [float(row[prefix + " " + axis]) for axis in ("Roll", "Pitch", "Yaw")]
+                actual_xyz = [float(value) for value in origin.attrib["xyz"].split()]
+                actual_rpy = [float(value) for value in origin.attrib["rpy"].split()]
+                for actual, wanted in zip(actual_xyz, expected_xyz):
+                    self.assertAlmostEqual(actual, wanted, places=9)
+                for actual, wanted in zip(actual_rpy, expected_rpy):
+                    self.assertAlmostEqual(actual, wanted, places=9)
+
+    def test_candidate_xml_is_parseable_and_mount_is_unchanged(self):
+        ET.parse(self.candidate_path)
+        baseline = audit.parse_urdf(self.source)
+        generated = audit.parse_urdf(self.candidate_path)
+        self.assertEqual(generated["base_link_to_base"], baseline["base_link_to_base"])
+
+    def test_rejects_output_path_that_is_not_explicitly_non_deployable(self):
+        path = self.temp_path / "robot.urdf"
+        with self.assertRaisesRegex(ValueError, "NOT_FOR_ROBOT"):
+            candidate.generate_candidate(self.source, self.csv_path, path)
+
+    def test_rejects_missing_left_joint_row(self):
+        def mutate(rows):
+            rows[:] = [row for row in rows if row["Joint Name"] != "Joint3L"]
+        bad_csv = self._write_modified_csv(mutate, "missing-joint.csv")
+        with self.assertRaisesRegex(ValueError, "missing left-arm joints"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "missing-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_duplicate_joint_name_even_when_child_link_is_blank(self):
+        def mutate(rows):
+            duplicate = dict(next(row for row in rows if row["Joint Name"] == "Joint1L"))
+            duplicate["Link Name"] = ""
+            rows.append(duplicate)
+        bad_csv = self._write_modified_csv(mutate, "duplicate-joint.csv")
+        with self.assertRaisesRegex(ValueError, "duplicate CSV joint row"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "duplicate-joint-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_duplicate_link_row(self):
+        def mutate(rows):
+            duplicate = dict(next(row for row in rows if row["Link Name"] == "Link1L"))
+            duplicate["Joint Name"] = ""
+            rows.append(duplicate)
+        bad_csv = self._write_modified_csv(mutate, "duplicate-link.csv")
+        with self.assertRaisesRegex(ValueError, "duplicate CSV link row"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "duplicate-link-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_parent_child_mismatch(self):
+        def mutate(rows):
+            next(row for row in rows if row["Joint Name"] == "Joint4L")["Parent"] = "WrongParent"
+        bad_csv = self._write_modified_csv(mutate, "wrong-parent.csv")
+        with self.assertRaisesRegex(ValueError, "parent mismatch"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "parent-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_child_link_mismatch(self):
+        def mutate(rows):
+            next(row for row in rows if row["Joint Name"] == "Joint4L")["Link Name"] = "WrongChild"
+        bad_csv = self._write_modified_csv(mutate, "wrong-child.csv")
+        with self.assertRaisesRegex(ValueError, "child mismatch"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "child-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_non_revolute_joint(self):
+        def mutate(rows):
+            next(row for row in rows if row["Joint Name"] == "Joint5L")["Joint Type"] = "fixed"
+        bad_csv = self._write_modified_csv(mutate, "wrong-type.csv")
+        with self.assertRaisesRegex(ValueError, "type mismatch"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "type-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_zero_axis(self):
+        def mutate(rows):
+            row = next(row for row in rows if row["Joint Name"] == "Joint2L")
+            row["Joint Axis X"] = "0"
+            row["Joint Axis Y"] = "0"
+            row["Joint Axis Z"] = "0"
+        bad_csv = self._write_modified_csv(mutate, "zero-axis.csv")
+        with self.assertRaisesRegex(ValueError, "zero joint axis"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "axis-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_rejects_non_finite_joint_origin(self):
+        def mutate(rows):
+            next(row for row in rows if row["Joint Name"] == "Joint2L")["Joint Origin X"] = "nan"
+        bad_csv = self._write_modified_csv(mutate, "nan-origin.csv")
+        with self.assertRaisesRegex(ValueError, "non-finite"):
+            candidate.generate_candidate(self.source, bad_csv, self.temp_path / "nan-candidate-NOT_FOR_ROBOT.urdf")
+
+    def test_historical_comparison_has_seven_unique_poses_and_reproducible_pair_counts(self):
+        report = candidate.compare_models(
+            self.source, self.candidate_path, self.csv_path, list(candidate.SAMPLE_FILES)
+        )
+        self.assertEqual(report["sample_counts"]["raw_sample_count"], 11)
+        self.assertEqual(report["sample_counts"]["unique_pose_count"], 7)
+        all_pairs = report["pairwise_relative_rotation_angle_error_deg"]["all_unique_poses"]
+        without_l01 = report["pairwise_relative_rotation_angle_error_deg"]["excluding_L01"]
+        self.assertEqual(all_pairs["baseline_W"]["count"], 21)
+        self.assertEqual(all_pairs["csv_candidate_C"]["count"], 21)
+        self.assertEqual(without_l01["baseline_W"]["count"], 15)
+        self.assertEqual(without_l01["csv_candidate_C"]["count"], 15)
+        self.assertAlmostEqual(all_pairs["baseline_W"]["median"], 23.94, delta=0.05)
+        self.assertAlmostEqual(all_pairs["baseline_W"]["max"], 140.37, delta=0.05)
+        self.assertAlmostEqual(all_pairs["csv_candidate_C"]["median"], 29.52, delta=0.05)
+        self.assertAlmostEqual(all_pairs["csv_candidate_C"]["max"], 75.80, delta=0.05)
+        self.assertAlmostEqual(without_l01["csv_candidate_C"]["median"], 20.10, delta=0.05)
+        self.assertAlmostEqual(without_l01["csv_candidate_C"]["max"], 75.80, delta=0.05)
+        self.assertTrue(all(value for key, value in report["structural_checks"].items() if key != "robot_deployment_allowed"))
+        self.assertFalse(report["structural_checks"]["robot_deployment_allowed"])
+
+    def test_report_marks_controller_tcp_and_frame_assumptions_unverified(self):
+        report = candidate.compare_models(
+            self.source, self.candidate_path, self.csv_path, list(candidate.SAMPLE_FILES)
+        )
+        assumptions = report["frame_and_data_assumptions"]
+        self.assertIn("unverified", assumptions["tcp_assumption"])
+        self.assertIn("not independent", assumptions["feedback_assumption"])
+        self.assertFalse(report["structural_checks"]["robot_deployment_allowed"])
+
+
+if __name__ == "__main__":
+    unittest.main()
