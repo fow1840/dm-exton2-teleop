@@ -69,7 +69,7 @@ python3 tools/tests/test_t39_csv_urdf_candidate.py -v
 
 完整数值见 [T39 首轮离线对比结果](./T39_CSV候选URDF离线对比结果_20261108.md)。
 
-- 最新完整 CI run 42471568069 / job 128703699665：success；T39：18/18 PASS，T32：6/6 PASS，Pink IK：2/2 PASS；候选生成、Pink W/C 对照、Python 编译和 diff whitespace 检查全部通过。
+- 最新完整 CI run 42471870514 / job 128704284047：success；T39：18/18 PASS，T32：6/6 PASS，Pink IK：2/2 PASS；候选生成、Pink W/C 对照、Python 编译和 diff whitespace 检查全部通过。
 - 11 条历史原始记录去重为 7 个左臂姿态。
 - 全部 21 对姿态：W 相对旋转误差中位数/最大值 23.94°/140.37°；CSV 候选 C 为 29.52°/75.80°。
 - 排除 L01 后 15 对姿态：W 为 23.94°/140.37°；C 为 20.10°/75.80°。
