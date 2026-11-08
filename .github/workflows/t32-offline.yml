@@ -1,0 +1,31 @@
+name: T32 URDF and CSV offline audit
+
+on:
+  push:
+    branches:
+      - gpt6/t32-urdf-csv-audit-20261108
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  t32-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Run reproducible URDF/CSV audit tests
+        run: python tools/tests/test_t32_urdf_csv_audit.py -v
+      - name: Run audit report
+        run: python tools/dm-exo/urdf_fk_calib/audit_urdf_csv.py
+      - name: Compile audit code
+        run: python -m py_compile tools/dm-exo/urdf_fk_calib/audit_urdf_csv.py tools/tests/test_t32_urdf_csv_audit.py
+      - name: Check patch whitespace
+        run: git diff --check

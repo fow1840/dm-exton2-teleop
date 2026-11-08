@@ -1539,3 +1539,144 @@ average rate: 250.762
   工具链 9 组 / 流程协作纪律 5 条 / 硬件红线 6 条 / 位置索引 6 处），每条带任务编号可追溯。
 - 维护规则写入文档尾：新知识先入专题文档，索引只加指针；跨项目通用提炼进用户级规则与模板库。
 - 现场变更：无（纯文档）。已随分支提交推送。
+
+
+## 2026-11-08 | T32 URDF / CSV 关节轴与 FK 独立复核 | GPT-6
+
+- 动作：从当前 main 读取工作区 W、产品包固定版 P、下载版 D、演示源码版 E 四份 URDF，以及四份配套 CSV 和历史 L-1 样本；使用独立 RPY/轴旋转矩阵与显式链式 FK 复算。
+- 证据：四份 CSV Git blob SHA 相同；四份 URDF 的 14 个机械臂关节 type、parent/child、origin xyz/rpy、local axis 与 W 一致（安装固定关节命名差异单独处理）。统一 base_link 世界轴 dot：左臂 J2L/J3L/J4L/J6L 为 -1，其余左轴为 +1；右臂七轴均 +1。
+- 纠错：报告中的 1193.91 mm / 167.93° 与历史样本 L-1 的 FK 完全对应，不是零关节中性位。真正 q=0 时 W/C 左末端差为 1196.80 mm / 179.9992°。样本 L-1 的 q17 左臂切片为 [1:8]，复算 W/C 1193.9109 mm / 167.9297°。
+- 交付：新增标准库离线审计脚本与回归测试，覆盖 14 轴世界方向、CSV 字节一致性、四份 URDF 运动学字段、L-1 与 q=0 的 FK 差异及 TCP 残差。CI 待新 PR 运行。
+- 未验证：控制器真实零位、左右轴物理正方向、现场 base/TCP、CSV 是否代表实际交付机器人；不得将候选符号直接写入 URDF / Bridge。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改任何 URDF / CSV / Bridge / ROS 参数。
+
+
+## 2026-11-08 | T32 离线审计合并 main | GPT-6
+
+- PR #17 已合并，merge commit：31731b354cd241eedc1c63e79d9ab4afac64fb0b。
+- GitHub Actions run 42444767231 / job t32-offline success：6/6 tests PASS；独立 FK / 轴向审计脚本输出复核通过；py_compile、git diff --check 通过。
+- 结论：T32 离线文件对账、关节轴候选方向与历史样本 FK 报告已完成并可复现。左臂 CSV 与当前 W URDF 的 J2L/J3L/J4L/J6L 轴向候选相反；不据此直接修改 URDF 或 Bridge。
+- 真机边界：T32 不证明真实物理正方向、零位、base/TCP 或当前交付实物与 CSV 一致；这些仍由 T31 现场只读证据和 T34 经操作员批准的单轴试采验证。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改 URDF / CSV / Bridge / ROS 参数。
+
+
+## 2026-11-08 | T31 源码契约复核与只读采集器接手 | GPT-6
+
+- 动作：按 AGENTS.md 接手流程复核 HANDOFF.md、TASKS.md T29/T30、现场调试手册、IK/FK launch、IK target_cb、FK adapter 和 Bridge 反馈发布路径；复用并加强 PR #13 的只读 ROS 采集器与 fake ROS CLI 回归。
+- 源码证据：IK launch 默认 root/ref frame 均为 base_link，目标末端为右 Link7 / 左 Link7L；target_cb 读取 PoseStamped 的位置与 XYZW 四元数，但不读取 header.frame_id、不做 TF 变换，因此上游 target 必须已处于 IK 的 base_link 解释坐标约定。FK adapter 默认 base_frame=base_link，左右末端分别 Link7L/Link7；Bridge 发布 JointState 时 stamp 为本机 ROS 当前时间、frame_id=base_link、关节名顺序为右七轴再左七轴；若 TCP 反馈快照为空，会回退到指令缓存，消息时间戳不等于设备采样时间戳。
+- 状态语义：/target_robot/{left,right}_ee/state 由 FK adapter 与 IK 都声明发布端；FK 在任一侧 clutch 按下时按 yield_when_clutch 默认抑制双侧状态，IK 在 publish_commanded_ee_state=true 且 clutch 活跃时可能发布命令 FK 状态。必须结合运行态参数、topic info 和样本来源判断，不能仅凭 topic 名把该话题认作真机实测末端。
+- 现场证据：尚未取得现场 ROS_DOMAIN_ID、运行节点、IK 参数、六话题 publisher/type/sample/rate 和 target/state frame_id；现场 SSH 隧道仅能在同一局域网使用，本轮没有远程 ROS 主机访问能力。
+- 验证：PR #13 原始分支 CI run 42388058353 success（fake ROS CLI 3 项测试）；本轮增加对六话题全部 info/sample/rate、必需参数读取、frame_id 样本保留和只读命令白名单的断言，等待新 PR CI。
+- 结论：源码契约与只读采集工具已准备；T31 仍 BLOCKED，必须在现场 ROS 主机或同一 ROS 2 局域网执行采集。未把历史 2026-11-06 参数日志当作当前运行态。
+- 现场变更：无。未连接控制器、未发运动命令、未写 ROS 参数、未重启任何进程。
+
+
+
+## 2026-11-08 | T31 离线采集器复核 CI 通过，现场证据仍阻塞 | GPT-6
+
+- PR #18 已从当前 main 基线重新整理；GitHub Actions run 42444769137 / job t31-offline success，3/3 测试通过。回归覆盖 53 次有界只读命令、六个话题各自 info/sample/rate、14 项关键 IK 参数、frame_id 样本保留、私有目录权限、缺少 ROS_DOMAIN_ID fail-fast，以及禁止 param set / service / action / movej / stop_motion。
+- 同一 PR 的 T33 回归 run 42444769155 success，21/21 PASS；T32 PR #17 已合并 main，6/6 独立 FK / CSV / 世界轴测试通过（run 42444767231）。
+- 结论：T31 的源码审计和只读采集工具已可合并；现场参数、发布端、消息频率和 target/state frame_id 尚未采集，T31 继续 BLOCKED。不能把 fake ROS CLI 或历史日志当成当前现场证据。
+- 现场变更：无。未连接 ROS 主机或控制器、未发送运动命令、未写参数、未重启进程。
+
+
+## 2026-11-08 | T31 离线采集器复核 CI 通过，现场证据仍阻塞 | GPT-6
+
+- PR #18 已从当前 main 基线重新整理；GitHub Actions run 42444769137 / job t31-offline success，3/3 测试通过。回归覆盖 53 次有界只读命令、六个话题各自 info/sample/rate、14 项关键 IK 参数、frame_id 样本保留、私有目录权限、缺少 ROS_DOMAIN_ID fail-fast，以及禁止 param set / service / action / movej / stop_motion。
+- 同一 PR 的 T33 回归 run 42444769155 success，21/21 PASS；T32 PR #17 已合并 main，6/6 独立 FK / CSV / 世界轴测试通过（run 42444767231）。
+- 结论：T31 的源码审计和只读采集工具已可合并；现场参数、发布端、消息频率和 target/state frame_id 尚未采集，T31 继续 BLOCKED。不能把 fake ROS CLI 或历史日志当成当前现场证据。
+- 现场变更：无。未连接 ROS 主机或控制器、未发送运动命令、未写参数、未重启进程。
+
+
+## 2026-11-08 | T31 离线采集器与源码审计合并 main；现场仍 BLOCKED | GPT-6
+
+- PR #19 已合并，merge commit：d2a42c409a64decf2c23fbea5650b328e4d8ebc4。包含 T31 源码坐标契约审计、只读 ROS collector、fake ROS CLI 测试和真机到位前清单。
+- GitHub Actions run 42445126265 / job t31-offline success：3/3 tests PASS；覆盖六话题 info/sample/rate、关键 IK 参数、frame_id 样本、只读命令白名单、私有权限和 ROS_DOMAIN_ID 缺失 fail-fast。
+- 同一 PR 的 T33 回归 run 42445126267 / job t33-offline success：21/21 tests PASS。T32 PR #17 已合并 main，run 42445126234 6/6 tests PASS。
+- 源码结论：IK target_cb 不读取 PoseStamped.header.frame_id、不做 TF；FK adapter 和 IK 都可能发布 ee/state；Bridge joint_states 在反馈快照缺失时回退命令缓存。以上已写入 docs/T31运行态与坐标系审计.md。
+- T31 状态保持 BLOCKED：尚未取得当前现场 ROS_DOMAIN_ID、运行节点、运行参数、六话题 publisher/type/sample/rate 与 target/state frame_id。需现场 ROS 主机或同一 ROS 2 局域网执行只读采集器。
+- 现场变更：无。未连接控制器或 ROS 主机、未发送运动命令、未写 ROS 参数、未重启现场进程。
+
+
+## 2026-11-08 | 左臂真实物理方向验证升为当前第一优先级 | GPT-6
+
+- 目标：按用户要求，将左臂真实物理方向验证作为当前最高优先级；明确 T31 现场只读核验先行，T34 真机单轴五点试采随后执行。
+- 证据分层：WORKLOG 2026-11-06 19:39 记录 9 包 / 4435 样本的离线审计，左臂 IK 指令与关节反馈数值层未见负相关；该结果不包含独立 TCP 物理方向观测，不能证明 URDF 正方向与真实机械臂一致。T32 离线报告发现 CSV 与当前 URDF 的左 J2L/J3L/J4L/J6L 世界轴为反向候选，但不能直接作为真机符号表。
+- 执行路径：T31（当前 ROS 参数、话题发布源、sample/rate/frame_id，只读且不连接控制器）→ T34（T31 通过、控制器协议/反馈/限位/停止流程核实、现场操作员明确批准后，先单个左臂关节五点试采，再扩展七轴）→ T35（基于实测表建立唯一坐标转换契约）。
+- 任务治理：T30 历史真机方向探针工作并入 T34，避免两套执行入口；旧版直接运行命令和固定 +0.12rad 幅度废止。T29 已部署的映射框架保留，但新的真机六方向标定暂缓到 T34/T35 结论之后。T35 及 URDF / Bridge / IK 符号修正保持冻结。
+- 状态：T31 仍 BLOCKED（等待现场 ROS 运行态证据）；T34 仍 BLOCKED（等待 T31 通过及当次现场操作员批准）。本轮只调整任务优先级与文档，不代表任何真机验证已执行。
+- 现场变更：无。未连接 ROS 主机或控制器、未发送运动命令、未写 ROS 参数、未重启现场进程、未修改 URDF / Bridge / IK。
+
+
+## 2026-11-08 | T39 CSV 候选 URDF 生成与离线对比启动 | GPT-6
+
+- 目标：按用户批准的组合方案，以厂家 SolidWorks CSV 为基准生成独立左臂候选 URDF，并与当前 W 模型进行可复现离线比较；不替代 T31 / T34 真机验证。
+- 任务治理：现有 T37 已占用（姿态映射与低倍率端到端验收，Issue #8），因此新任务编号采用 T39，避免覆盖既有任务；GitHub Issue #21 已创建并领取，分支 gpt6/t39-csv-urdf-candidate-20261108。
+- 已提交分支内容：tools/dm-exo/urdf_fk_calib/csv_urdf_candidate.py（标准库生成器）；tools/tests/test_t39_csv_urdf_candidate.py（回归测试）；docs/T39_CSV候选URDF生成与离线验证.md；两份候选 URDF（kinematics-only 与 CSV visual-frame diagnostic），均明确 NOT_FOR_ROBOT。
+- 模型边界：默认候选只替换 Joint1L～Joint7L 的 origin xyz/rpy 与 axis；保留 W 的右臂、全部限位、base_link_to_base 固定安装、link visual/collision/inertial 和 mesh URI。可选 visual 变体只更新左侧 visual/collision origin，仍保留 mesh 和 inertial。CSV 导出的零限位不会导入。
+- 离线报告设计：逐关节 world axis / dot、origin 差异、限位与右臂保持检查；历史 JSONL 7 个去重姿态的 FK 直接残差，以及相对旋转角不变量对比；明确 controller TCP / base / Link7L 假设未验证，controller TCP 不是独立外部测量。
+- 初始验证：T39 自动化测试已添加，尚待 PR CI 实际执行；未声称通过。生成器只写带 candidate 与 NOT_FOR_ROBOT 标记的输出路径，不连接控制器、不发 ROS 命令。
+- 当前优先级：T39 与 T31 并行；T34 需等待 T39 离线候选报告、T31 现场 frame/反馈核验、控制器协议/限位/停止行为核实和当次操作员批准。T35 继续冻结。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动 RViz / IK / Bridge、未发送运动命令、未修改生产 URDF / ROS 参数。
+
+
+## 2026-11-08 | T39 离线 CI 与候选生成验收 | GPT-6
+
+- PR：[ #22 ](https://github.com/fow1840/dm-exton2-teleop/pull/22)，当前 OPEN，尚未合并。
+- T39 GitHub Actions：run 42457281303 / job 128658890220，success；T39 回归测试 15 tests PASS，候选生成 CLI 执行成功，生成的临时候选 URDF 与 JSON 报告均非空。
+- T32 复验：run 42457281322 / job 128658890414，success；6 tests PASS。
+- 同一 PR 关联回归：T31 run 42457281270 success；T33 run 42457281263 success。
+- 已加入静态候选 URDF 的 XML/CSV 一致性测试；两个候选文件均通过解析，检查了左臂 CSV origin/axis、右臂不变、base mount 不变和限位保留。
+- 状态：离线实现与 CI 验收通过；PR 等待 review/merge，故 T39 在任务台账保持 DOING，不宣称已合并。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动现场节点、未发送运动命令、未修改生产 URDF / Bridge / IK / ROS 参数。
+
+
+## 2026-11-08 | T39 首轮历史样本比较结果 | GPT-6
+
+- CI 生成器输入：W URDF SHA256 8187e27b969f4b10dc2a06ea54c3391eb4a420e2a823535a233b2aec5331f950；CSV SHA256 e0f8acc49c9fe9fd21abb45740beca7a1697e48bc82975a7d3337788566d121f。
+- CI 临时候选 URDF SHA256：1c4dd75ea3bd99103be57013c690c2edc4e6fa0bdd3c3c6e2e71febe2068a5ec。
+- 样本：11 条原始 JSONL 记录，按 q_left 去重后 7 个姿态。
+- 相对旋转角差异：全部 21 对姿态，W 中位数/最大值 23.94°/140.37°，C 为 29.52°/75.80°；排除 L01 后 15 对，W 为 23.94°/140.37°，C 为 20.10°/75.80°。
+- 绝对 frame 假设下的直接残差：W 位置中位数/最大值 583.34/1757.48 mm、姿态 128.60/167.03°；C 位置 1062.14/1661.53 mm、姿态 141.99/176.97°。base/TCP 假设尚未由 T31 核实，这些绝对残差不能解释为真实空间精度。
+- 结论：CSV 候选的最坏相对旋转误差下降，但全样本中位数较差；排除 L01 后中位数改善；绝对残差未改善。证据为混合，不选择 C 作为最终 URDF，不修改生产模型。
+- 详细报告：docs/T39_CSV候选URDF离线对比结果_20261108.md。
+- 当前门禁：T31 现场 frame/反馈只读核验仍待现场；T34 真机五点方向验证仍 BLOCKED。T35 保持冻结。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动现场进程、未发送运动命令、未修改生产 URDF / Bridge / IK / ROS 参数。
+
+
+## 2026-11-08 | T39 Pink IK 对照完成 | GPT-6
+
+- 新增 tools/dm-exo/urdf_fk_calib/compare_pink_ik.py：使用项目 Pink 3.5.0 / Pinocchio 2.7.0 / OSQP 与 ik_node 相同的 FrameTask(300/40)、PostureTask(0.3)、DampingTask(12)、dt=1/250s。
+- 对 6 个不越限历史姿态，以 W 在记录 q 上的 Link7L FK 作为合成目标，W/C 使用相同轻微扰动 seed 分别求解；L01 因 J4L 越过当前限位排除。
+- CI Pink 对照：W 6/6 收敛，位置/姿态中位误差 0.115mm/0.059°，中位迭代 1；CSV 候选 C 0/6 收敛，位置/姿态中位误差 206.314mm/70.315°，迭代均达到 400 上限。
+- 解释边界：目标由 W FK 合成，不是控制器 TCP 或外部测量。结果证明在当前共同 base/frame 假设下 W/C 运动学差异大，C 不能复现 W 合成目标；不证明 W 就是真机正确模型。若 CSV 的 base/link frame 需要固定变换，T31 必须先核实。
+- T39 workflow run 42458107051 首次包含 Pink stack，当前 run success；测试与完整 Pink 比较命令均执行成功。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动现场 IK/Bridge、未发送运动命令、未修改生产 URDF / ROS 参数。
+
+
+## 2026-11-08 | T39 最终 CI 复验 | GPT-6
+
+- 最新 PR #22 head CI run 42458273319 / job 128661839290：success。
+- T32 6/6、T39 候选生成测试 15/15、Pink IK 测试 2/2 全部 PASS；T31 与 T33 对应 workflow 也 success。
+- 完整 Pink IK 对照 CLI 再次成功：W 6/6 收敛（位置/姿态中位 0.115 mm / 0.059°）；C 0/6 收敛（206.314 mm / 70.315°）。
+- 代码与文档已推到 PR #22；PR 仍 OPEN、mergeable，尚未合并 main。T39 任务维持 DOING，等待 review/merge。
+- 现场变更：无。
+
+
+## 2026-11-08 | T39 最终回归加固与 PR 分支 CI 复验 | GPT-6
+
+- 回归补强：将重复 Joint Name 与重复 Link Name 分开测试；新增 child link mismatch 和非 revolute joint 拒绝用例。当前 T39 测试共 18 项，覆盖候选可重复生成、只改七个左臂 joint origin/axis、右臂与 fixed mount 不变、限位保留、CSV 零限位不导入、visual-frame 诊断变体、缺行/重复行/错误 parent/child/type/零轴/非有限数拒绝，以及历史样本统计可复现。
+- 最新完整 GitHub Actions：T39 run 42471870514 / job 128704284047 success；T39 18/18、T32 6/6、Pink IK 2/2 PASS。候选生成、完整 Pink W/C 比较、Python 编译与 git diff --check 均通过。此前 Python 3.10 下载曾遇到一次 HTTP 504，重试成功；没有测试断言失败。
+- 离线结论：11 条历史记录去重为 7 个左臂姿态。21 对全样本相对旋转角误差，W 中位数/最大值 23.94°/140.37°，C 为 29.52°/75.80°；排除 L01 后 15 对，W 为 23.94°/140.37°，C 为 20.10°/75.80°。绝对 FK/TCP 残差在未核实 base/TCP frame 假设下未改善。
+- Pink 合成目标对照：W 6/6 收敛，位置/姿态中位误差 0.115 mm/0.059°；C 0/6 收敛，206.314 mm/70.315°，均达到 400 次迭代上限。目标由 W FK 合成，不是真机 ground truth，只证明共同 frame 假设下 W/C 模型差异显著。
+- 结论：CSV 候选保留为离线诊断模型，不作为最终真机 URDF；不修改生产模型、Bridge、IK 或 ROS 参数。PR #22 OPEN、未合并，等待 review/merge；T31 现场只读核验仍 BLOCKED，T34 仍需现场操作员批准，T35 继续冻结。
+- 现场变更：无。未连接 ROS 主机或控制器、未启动现场节点、未发送运动命令、未修改生产 URDF / Bridge / IK / ROS 参数。
+
+
+## 2026-11-08 | PR #16 合并整理与 PR #14 离线合并审查 | Codex
+
+- 合并 origin/main 到 docs/urdf-acceptance-plan，WORKLOG 双侧追加条目全部保留；修正总览 T29 HOLD / T30 并入 T34 / T31 BLOCKED / T32 DONE，T39 按 PR #22 merge c3e7f06 标 DONE，同步 HANDOFF 与专项任务包。
+- 验收方案修正：G0 需当次限位快照且允许批准的内缩；操作员摆位不是零风险；T34 当次批准不可绕过；隔离离线候选可预演，生产链仍需验收；未合并 PR #14 的 sweep_calib 不能作为现场入口。
+- PR #14 head 50e2b0a 的两个 mock 反例：DEFAULT_DRY_RUN attempted controller connection calls=1；FROZEN_FEEDBACK reached=True actual_J1=0 reported_J1=0.005 target_J1=0.01 tolerance=0.008。全部 socket/运动均拦截，无真机连接。完整阻断项见 docs/PR14离线合并审查.md。决定保留 PR #14 OPEN，暂缓整体合并。
+- 本地 T33：Ran 21 tests，OK (skipped=1)，即 20 通过、1 项 Pinocchio FK 回放因未安装跳过；完整依赖回放由 PR CI 验证，未冒称本地全部通过。
+- 现场变更：无；未连接控制器、未启动现场进程、未清故障/使能/发送动作。现场 T01 未执行，现场当前状态未验证。

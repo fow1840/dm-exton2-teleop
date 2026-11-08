@@ -212,27 +212,30 @@ J7 在限位外时控制器是否拒绝 movej 未验证；若 5Hz 后仍偶发�
 
 任务总说明：[docs/左臂遥操作方向异常_AI任务包.md](./docs/左臂遥操作方向异常_AI任务包.md)
 
+**当前第一优先级（2026-11-08）**：T39 CSV 候选 URDF 离线生成/对比已完成（18/18 回归、Pink IK 2/2、T32 6/6 PASS），PR #22 已合并（c3e7f06）；当前实际推进重点转为 T31 现场 ROS 只读采集。T31 与 T39 结果均可复核后，在控制器协议/限位/反馈/停止行为核实且操作员明确批准下执行 T34 左臂真实物理方向验证（先单关节五点，再逐轴扩展）。T32/T33 已完成。T30 历史翻转表任务并入 T34；旧版直接执行命令和固定 +0.12rad 幅度废止。CSV 候选不是实测真机模型；T39 首轮离线比较结果为混合：全样本相对旋转中位数未优于 W，但最大误差降低；排除 L01 后中位数改善，绝对 TCP 残差仍未改善且 frame 假设未核实。不得据此选定 C。Pink 合成目标对照中 W 6/6 收敛、C 0/6，但目标由 W FK 生成，不是真机 ground truth；它只说明在共同 base/frame 假设下两模型差异很大。真实方向表完成前，T35 及生产 URDF / Bridge / IK 符号修正保持冻结。
+
 任务台账：[TASKS.md](./TASKS.md)（唯一权威状态）；GitHub Issues 用于领取、讨论、依赖交叉引用和 PR 关联。
 
-| 任务 | Issue | 初始状态 |
+| 任务 | Issue | 当前状态（2026-11-08） |
 |---|---|---|
-| T31 运行态参数与坐标系契约审计 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) | `status:ready` |
-| T32 左右臂 URDF / CSV 运动学离线对账 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) | `status:ready` |
-| T33 T30 真机探针安全加固与离线测试 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) | `status:ready` |
-| T34 左臂逐关节真机方向探针 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) | `status:blocked` |
+| T31 运行态参数与坐标系契约审计 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) | `status:blocked`（等待现场只读采集） |
+| T32 左右臂 URDF / CSV 运动学离线对账 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) | `closed / DONE` |
+| T33 T30 真机探针安全加固与离线测试 | [#4](https://github.com/fow1840/dm-exton2-teleop/issues/4) | `closed / DONE` |
+| T34 左臂真实物理方向验证 | [#5](https://github.com/fow1840/dm-exton2-teleop/issues/5) | `status:blocked`（等待 T31 和当次操作员批准） |
 | T35 统一关节坐标转换契约与最小修正 | [#6](https://github.com/fow1840/dm-exton2-teleop/issues/6) | `status:blocked` |
 | T36 左臂末端平移六方向标定 | [#7](https://github.com/fow1840/dm-exton2-teleop/issues/7) | `status:blocked` |
 | T37 姿态映射与低倍率端到端验收 | [#8](https://github.com/fow1840/dm-exton2-teleop/issues/8) | `status:blocked` |
 | T38 结案与交接资料更新 | [#9](https://github.com/fow1840/dm-exton2-teleop/issues/9) | `status:blocked` |
+| T39 CSV 候选 URDF 生成与离线对比 | [#21](https://github.com/fow1840/dm-exton2-teleop/issues/21) | `DONE`（离线实现与 CI 验收完成：T39 18/18、Pink IK 2/2、T32 6/6 PASS；PR #22 已合并（c3e7f06）） |
 
 ### AI 领取步骤
 
 1. 拉取最新 `main`，阅读 `AGENTS.md`、`TASKS.md`、专项任务包和对应 Issue。
-2. 仅领取 `status:ready` 且依赖满足的 Issue；当前第一批为 T31 / T32 / T33。
+2. 仅领取 `status:ready` 且依赖满足的 Issue；当前 T32 / T33 已完成，T31 等现场只读证据，T34 等 T31 通过及操作员批准。
 3. 在 Issue 评论写 `[CLAIM] AI 标识 / 日期时间`；检查是否已有 Assignee 或其他 AI 认领。权限允许时设置 Assignee。
 4. 认领成功后把 Issue 标签改为 `status:in-progress`，并在 `TASKS.md` 将对应状态改为 `DOING`。
 5. 创建独立分支，完成后提交关联 Issue 的 PR；审核合并前不得把任务标记为 DONE。
-6. 真机任务没有现场操作员明确授权时保持 BLOCKED，不得连接控制器或发送运动命令。
+6. 真机任务没有现场操作员明确授权时保持 BLOCKED，不得连接控制器或发送运动命令。T34 只能使用 T33 加固版、带当次审批摘要的 plan；不得使用旧版直接命令或固定 +0.12rad 幅度。
 
 ### 状态约定
 
