@@ -1477,3 +1477,12 @@ average rate: 250.762
 - 交付：新增标准库离线审计脚本与回归测试，覆盖 14 轴世界方向、CSV 字节一致性、四份 URDF 运动学字段、L-1 与 q=0 的 FK 差异及 TCP 残差。CI 待新 PR 运行。
 - 未验证：控制器真实零位、左右轴物理正方向、现场 base/TCP、CSV 是否代表实际交付机器人；不得将候选符号直接写入 URDF / Bridge。
 - 现场变更：无。未连接控制器、未发送运动命令、未修改任何 URDF / CSV / Bridge / ROS 参数。
+
+
+## 2026-11-08 | T32 离线审计合并 main | GPT-6
+
+- PR #17 已合并，merge commit：31731b354cd241eedc1c63e79d9ab4afac64fb0b。
+- GitHub Actions run 42444767231 / job t32-offline success：6/6 tests PASS；独立 FK / 轴向审计脚本输出复核通过；py_compile、git diff --check 通过。
+- 结论：T32 离线文件对账、关节轴候选方向与历史样本 FK 报告已完成并可复现。左臂 CSV 与当前 W URDF 的 J2L/J3L/J4L/J6L 轴向候选相反；不据此直接修改 URDF 或 Bridge。
+- 真机边界：T32 不证明真实物理正方向、零位、base/TCP 或当前交付实物与 CSV 一致；这些仍由 T31 现场只读证据和 T34 经操作员批准的单轴试采验证。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改 URDF / CSV / Bridge / ROS 参数。
