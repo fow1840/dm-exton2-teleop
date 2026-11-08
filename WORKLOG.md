@@ -1376,3 +1376,84 @@ average rate: 250.762
 - 证据：[自动采样方案](./docs/urdf-auto-sampling-plan.md)、[T33 #4](https://github.com/fow1840/dm-exton2-teleop/issues/4)、[T34 #5](https://github.com/fow1840/dm-exton2-teleop/issues/5)。
 - 下一步：T33 离线验证通过后，按 T34 先采左臂单关节的基准、正向、回基准、反向、回基准五点数据。
 - 现场变更：无。本条记录范围为方案与任务优先级，真机自动采样待验证。
+
+## 2026-11-07 | T33 自动采样探针离线实现 | Codex
+
+- 动作：默认离线预演，显式执行时绑定审批摘要。五点流程保存实际关节角、前后配对的 TCP、控制器状态和两次回位误差。加入限位、故障、反馈冻结和异常停止验证。
+- 证据：`test_urdf_axis_probe.py` 9 项通过（Pinocchio 2.7.0，含左右臂方向回放）；`test_bridge_offline.py` 21 项通过；`test_master_slave_map.py` 15 项通过；`git diff --check` 通过。
+- 未验证：现场固件的 MoveJ、保持值、反馈时效和停止行为。T33 离线已验证，等待 PR 审核。T34 继续按 T31、T32、T33 的前置条件和现场批准执行。
+- 现场变更：无。
+
+## 2026-11-07 | T33 PR #11 安全审查修复 | GPT-6
+
+- 动作：接续既有 `codex/t33-auto-sampling` 分支与 PR #11。按 Issue #4 逐项复核控制器状态门禁、异常停止、左右 TCP 数据段和反馈新鲜度边界。修复 `get_device_state` 的 fail-closed 校验：显式要求 `state`、`hardwareErrors`、`softwareErrors`、`motorErrorDetails` 及协议错误码；控制器状态故障或响应不完整时，不再盲目发送 `stop_motion`，而是记录跳过原因并交由现场操作员处置。新增缺失状态字段、运动后故障、冻结反馈和控制器连接冲突测试；强化左右臂 TCP 四元数段断言。
+- 证据：`docs/机械臂通信协议说明_V0.3_梳理.md` 明确 `pose[14]` 为左 TCP 7D + 右 TCP 7D，顺序为 `(x,y,z,qw,qx,qy,qz)`；同一协议梳理只列出 `erroeCode`、`hardwareErrors`、`softwareErrors`，没有定义 `state` / `motorErrorDetails`。因此执行入口对这两个字段缺失采取 fail-closed，而不是把缺失当作无故障。
+- 修改文件：`tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py`、`tools/tests/test_urdf_axis_probe.py`、`docs/urdf-auto-sampling-plan.md`、`TASKS.md`。
+- 验证：新增离线测试已写入；本轮未在当前执行环境运行测试，不能记录为通过。测试命令：`python3 tools/tests/test_urdf_axis_probe.py -v`。后续应在仓库的 Pink/Pinocchio 环境执行，并核对全部结果。
+- 未验证：现场固件是否实际返回 `state` 和 `motorErrorDetails`；V0.3 未定义设备侧采样时间戳/序号，因此主机接收时间不能证明反馈源新鲜；现场 MoveJ、保持值、回执及停止行为仍由 T34 在操作员批准后验证。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改现场 URDF / Bridge / ROS 参数。
+
+
+
+## 2026-11-07 | T33 安全审查补强：控制器拒绝响应 fail-closed | GPT-6
+
+- 假设：`movej` 或 `get_device_state` 显式返回非成功状态 / 错配响应时，控制器当前状态不能安全推断；继续自动发送 `stop_motion` 可能绕过现场 fault 处置流程。
+- 修改：`tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py` 中将上述响应归为 `ControllerStateError`，沿用现有故障分支，不再追加 `stop_motion`；新增模拟测试覆盖显式拒绝、状态查询失败和错配状态响应。
+- 证据：提交 `bf47f5aa9238b622a972bd7fa31ad7783735fafa`（探针）；`28f467ff7dcf4967933481001a674c6aae2e54a8`（测试）；`487e0bc5bbe750c4aa3558a41569897b80b61203`（方案文档）；`bf10d4147883f9fb6b70e44c2cdef13c59b49b9c`（离线 CI workflow）。
+- 测试：新增回归用例；本次尚未在本地运行。GitHub Actions workflow 已加入，等待实际运行结果，不将其记作 PASS。
+- 未验证：真实固件对 `get_device_state` / `movej` 的回执字段、状态值和停止行为；必须由 T34 现场核对。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改现场文件或参数。
+
+## 2026-11-07 | T33 增加只读控制器预检并补齐故障回归 | GPT-6
+
+- 动作：增加 --inspect-controller 只读模式，依次读取 get_device_state、get_config、get_joint_position、get_tcp_pose，保存原始响应、主机请求/接收时间及 URDF SHA256；该模式不发送 movej / stop_motion、不使能、不复位。
+- 安全修正：get_device_state / movej 的显式非成功回执或错配响应改为 ControllerStateError，复用现有 fail-closed 分支，不再追加 stop_motion。普通传输异常仍保留原有停止尝试和现场人工接管要求。
+- 测试：新增模拟测试覆盖显式 movej 拒绝、状态查询失败、错配状态响应、只读预检仅发四类查询命令及 CLI 缺少 endpoint 时不连接。CI workflow 已加入；本轮尚未取得实际测试 / CI 结果，未宣称 PASS。
+- 证据：探针提交 83b0c4c8e82df32d618543f6ea1b1cfa65614d33、83e9398f6719292be629464a209d568bbcda6532、7772d54003ddcb4d16ca5f882b99962ef81199b1；测试提交 b5bf5450947fbdbc57aad3c2785db586d90b9bbf；方案文档提交 0deaac9af5246bb8056f4fef80849de0af37f3c3、01bdf780eb88837c3794e390d6701bff2c843bd1。
+- 未验证：现场固件对四类查询的响应字段、TCP 单连接切换、反馈新鲜度和 stop_motion 实际语义。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改现场参数或 URDF。
+
+## 2026-11-07 | T33 离线 CI 完整通过（含 Pinocchio 2.7.0） | GPT-6
+
+- 证据：GitHub Actions run 42386074029，job t33-offline 结论 success；Pinocchio 2.7.0 安装成功；16 项测试全部 OK，包含左右臂 Pinocchio FK 回放；py_compile 与 git diff --check 均成功。
+- 结论：T33 当前分支的模拟控制器、故障门禁、只读预检和运动学离线回放通过 CI。该结果不代表现场 V0.3 回执、真实反馈新鲜度、stop_motion 或任何真机运动已验证。
+- 现场变更：无。
+
+## 2026-11-07 | T33 只读预检部分证据保留回归通过 | GPT-6
+
+- 修改：只读预检遇到任一查询失败时，保存此前成功的原始响应、失败命令和错误；状态 / 运动请求的错配或显式失败响应保留原始回执，不追加运动控制命令。
+- 证据：GitHub Actions run 42386529586，job t33-offline success；17 项测试全部 OK，包含 Pinocchio 2.7.0 FK 回放和只读预检部分响应保留；py_compile 与 git diff --check 成功。
+- 结论：T33 离线门禁进一步通过。仍未验证真实固件字段、反馈新鲜度、TCP 单连接切换和停止行为。
+- 现场变更：无。
+
+## 2026-11-07 | T33 计划坐标系门禁与最终离线回归 | GPT-6
+
+- 修改：Plan.from_json 现在只接受已验证的 base_link 和当前所选臂 Link7 / Link7L 帧，拒绝仅通过修改计划字段切换到未经验证的 base / TCP 帧；新增对应测试。
+- 证据：GitHub Actions run 42387029702，job t33-offline success；18 项测试全部 OK，含 Pinocchio 2.7.0 FK 回放、左右臂五点模拟、故障响应、只读预检部分证据和坐标系计划门禁；py_compile 与 git diff --check 成功。
+- 未验证：厂家 V0.3 运动中 state 状态值、movej 回执语义、反馈新鲜度、stop_motion 真实行为。若运动期间 state 返回 moving/busy，需先按正式状态机契约适配代码，不得放宽白名单。
+- 现场变更：无。
+
+
+## 2026-11-08 | T33 协议字段证据纠正与安全门禁确认 | GPT-6
+
+- 纠正此前 T33 审查记录中的一句不准确表述：早期 docs/机械臂通信协议说明_V0.3_梳理.md 只摘录了 erroeCode、hardwareErrors、softwareErrors，因此曾把 state / motorErrorDetails 写成“现场未验证”。复核仓库历史原始响应后确认，这两个字段都已有现场证据；问题是 Markdown 梳理漏项，不是没有源文件或控制器从未返回。
+- 证据：TASKS.md T28 保存 2026-11-06 16:10 原始故障报文：erroeCode=1、hardwareErrors=[17235970]、motorErrorDetails=[{motor_id:7,motor_detail_code:8,...}]、softwareErrors=[]、state="fault"。WORKLOG.md 2026-11-06 16:19 记录故障清除后 motorErrorDetails=null、softwareErrors=[]、state="ready"；另有 17:44:40 完整报文 state="idle" 但 erroeCode=2、softwareErrors=[34013185]，证明不能只看 state 判无故障。
+- 命令边界：#7 get_device_state 是状态查询；#8 get_config 是独立配置/软限位查询；#11 enable_robot、#12/13 disable_robot、#10 clear_fault 是独立命令。T33 不调用使能、下使能或清故障命令；idle/ready 不等同于已使能，T34 仍由现场操作员通过示教器/5566 确认。
+- 代码结论：check_device() 已要求 state、hardwareErrors、softwareErrors、motorErrorDetails 和协议错误码；允许 motorErrorDetails 为 null 或空数组；只接受 state=idle/ready、整数 0 错误码和空错误列表。此次未放宽任何门禁，只补充解析器来源注释、协议字段说明和回归测试。
+- 新增离线测试：覆盖 clean-state 合法形状（模拟数据）、历史硬件堵转报文、state=idle 但软件故障非空、未知/moving/busy 状态拒绝，以及采样/只读预检绝不发送 enable_robot、disable_robot、clear_fault。这些是离线回归，不等同于新的现场健康态采集。
+- 未验证：尚无完整健康态 get_device_state 原始报文；完整 state 枚举/转换、设备侧反馈时间戳与序号、使能状态是否有独立可读字段，仍需原始 PDF 对照及现场只读响应/厂家确认。
+- 现场变更：无。未连接控制器、未发送运动命令、未清故障、未使能/下使能、未修改现场 URDF / Bridge / ROS 参数。
+
+
+## 2026-11-08 | T33 协议字段回归 CI 通过 | GPT-6
+
+- 证据：GitHub Actions run 42436808400（commit 84f4905e9df959111a22d9418b4922180ec69dad），job t33-offline success；21 项测试全部通过，包含 Pinocchio 左右臂 FK 回放、clean idle/ready 模拟结构、历史 T28 堵转报文 fail-closed、idle+软件故障报文 fail-closed、fault/moving/busy/unknown 状态拒绝，以及不自动 enable/disable/clear_fault；py_compile 与 git diff --check 均通过。
+- 结论：本轮协议字段证据纠正与安全门禁回归通过离线 CI。CI 只证明模拟测试与静态检查通过，不代表已取得完整健康态真机响应，不代表现场状态机、反馈新鲜度、使能状态或运动/停止行为已验证。
+- 现场变更：无。未连接控制器、未发送运动命令、未清故障、未使能/下使能。
+
+
+## 2026-11-08 | T33 最终 PR 分支快照复验 | GPT-6
+
+- 证据：最后一笔台账提交 34d65a914dc6e74dffd64f81f3a5f1ba82e29fbd 对应 GitHub Actions run 42436933796，job t33-offline success；Ran 21 tests / OK；Pinocchio 安装、py_compile、git diff --check 全部成功。
+- 结论：协议梳理、采样方案、探针注释、回归测试、WORKLOG 和 TASKS 的最终分支快照均通过 CI。PR #11 保持 OPEN，未合并。
+- 现场变更：无。未连接控制器、未发送任何运动/使能/下使能/清故障命令。

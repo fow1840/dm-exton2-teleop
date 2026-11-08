@@ -52,3 +52,67 @@
 ## 后续采样
 
 左臂七轴验证通过后，再采肩、肘、腕的不同组合，覆盖常用遥操区域。清理重复构型和异常反馈，把拟合与独立验收数据分开。离线先检查关节坐标和基座/TCP 定义，再决定是否拟合几何参数。报告修正前后的 TCP 位置、姿态和运动方向误差。
+
+## 探针使用与记录
+
+默认离线，只检查 URDF。提供计划文件时，还会输出计划、四个目标与审批摘要，并用 URDF 限位预检。以下两步均可在开发机完成。
+
+~~~bash
+python3 tools/tests/test_urdf_axis_probe.py -v
+python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py /path/to/robot.urdf left --plan /path/to/plan.json
+~~~
+
+计划 JSON 由现场人员核对。关节角和角度容差均为 rad，时间均为秒。当前探针只接受 base_link 与所选臂对应的 Link7 / Link7L 模型帧；其他基座或 TCP 帧必须先完成明确的模型 / 工具变换适配，不能只修改计划字段绕过。
+
+| 字段 | 要求 |
+|---|---|
+| host、port、side、joint | 现场控制器、单侧 left/right、关节编号 1–7 |
+| baseline | 现场已读回并确认的 17 维角度，顺序为腰、左七轴、右七轴、头两轴 |
+| delta_rad、speed_pct | 当次批准的微扰幅度、点到点速度百分比 |
+| limit_margin_rad、urdf_limit_tolerance_rad | 控制器限位安全余量、允许的 URDF 限位差（例如已知的内缩值须在现场核对） |
+| target_tolerance_rad、hold_tolerance_rad、settle_tolerance_rad、settle_s | 目标及回位容差、未选轴容差、停稳角度容差和持续时间 |
+| point_timeout_s、rpc_timeout_s、max_pair_s、min_tcp_rotation_rad | 点位总时限、读接口时限、配对读数时间窗口和可辨识的最小 TCP 转角 |
+| base_frame、tcp_frame、tcp_position_unit | 确认的控制器坐标系、工具坐标系和 TCP 位置单位 m 或 mm |
+
+T34 获批后才可在现场使用执行模式（须另传 `--execute --output`，并在交互终端输入预演显示的审批摘要）。先确认 Bridge 与其他运动客户端已让出控制权，现场独立防护和停止能力有效。探针一次只发一条厂家 V0.3 点到点指令，未选轴使用协议的保持值。回执等待受点位时限约束。等待期间保持单请求，不并发查询。收到回执后仍需通过实际反馈确认到位与停稳。T34 需核对现场固件的回执、保持值和停止行为。
+
+输出为逐行 JSON。有效点保留 `q17`、以米和 qw-first 四元数表示的 `tcp14`、配对前后原始应答和返回基准的误差。请求与收包时间来自现场主机，V0.3 文档未定义设备采样时间戳。异常记录区分停止请求已尝试和收到回执。网络断开时可能无法收到停止回执，现场仍按独立停止流程处置。
+
+### 安全门禁与协议限制（T33 审查补充）
+
+- 协议梳理文档明确 `get_tcp_pose` 的 `pose[14]` 顺序为左 TCP 7D + 右 TCP 7D，每段为 `(x,y,z,qw,qx,qy,qz)`。探针保留两臂数据，左臂旋转四元数偏移为 3，右臂为 10；左右臂模拟测试分别验证对应一段发生变化。此处依据仓库协议梳理，不等同于 T33 已取得现场原始应答。
+- `get_device_state` 安全门禁要求响应显式包含 `state`、`hardwareErrors`、`softwareErrors`、`motorErrorDetails`，并包含协议错误码（`erroeCode`，兼容 `errorCode`）。状态必须是 `idle/ready`，错误码必须为整数 0，两个错误列表必须为空，电机错误明细只能为空列表或显式 `null`。任一字段缺失、类型不符或存在错误均 fail-closed。
+- 当前执行校验在每次采样轮询中都要求 `state` 为 `idle/ready`。厂家必须说明 movej 回执是动作完成还是仅接收，以及运动期间 `state` 是否会变为 `moving/busy`；若运动期间返回其他状态，T34 必须先根据正式状态机契约调整代码并补测，不得直接放宽白名单。
+- **字段证据分层（纠正此前审查表述）**：仓库早期的 V0.3 Markdown 梳理只摘录了 erroeCode、hardwareErrors、softwareErrors，漏列 state 与 motorErrorDetails；但二者已有现场实证，并非“未知字段”。TASKS.md 的 T28 保存了完整故障响应（state="fault"、motorErrorDetails:[...]、erroeCode:1）；WORKLOG.md 记录故障清除后出现过 state="ready"、motorErrorDetails:null、softwareErrors:[]，以及 state="idle" 但 erroeCode=2、softwareErrors 非空的响应。当前历史材料仍缺一份完整健康态原始报文，也未给出完整状态枚举/转换规则和电机明细对象的正式 schema；不得把部分现场证据扩写成厂家完整规范。
+- T33 当前解析器的严格门禁保持不变：必须有 state、hardwareErrors、softwareErrors、motorErrorDetails 和协议错误码；仅接受 state=idle/ready、错误码整数 0、两个错误列表为空，且 motorErrorDetails 为 null 或空数组。缺字段、未知状态、非空故障或类型不符均 fail-closed。离线测试覆盖的是模拟契约，不代表已取得完整健康态现场报文。
+- 命令边界：#7 get_device_state 是查询；#8 get_config 是独立限位查询；#11 enable_robot、#12/13 disable_robot 和 #10 clear_fault 是独立控制命令。T33 不得自动清故障/上使能/下使能；idle/ready 本身也不构成“已使能”的证明。T34 仍须由现场操作员在示教器/5566 确认使能状态并明确批准。
+- 若运动后检测到控制器状态故障或状态响应不完整，探针**不会再发送 `stop_motion`**，只记录跳过原因并交由现场操作员按已验证流程处置。现已进一步将 `get_device_state` 或 `movej` 的显式非成功回执、以及这两类请求收到的错配响应归为控制器状态不确定：不再追加 `stop_motion` 或其他运动命令。若是普通通信异常，则仍会尝试协议停止；没有收到停止回执不代表机械臂已停止。
+- 本机文件锁只防止同一主机/用户的探针实例并发，不代表能识别所有外部运动客户端。执行前仍必须由操作员确认 Bridge、示教 GUI 和其他客户端已让出控制器连接与运动控制权。若 TCP 连接冲突，探针记录中止，不下发运动。
+- V0.3 没有设备侧采样时间戳或序号。探针记录主机发送/接收时间，并通过目标进度、停稳窗口和关节/TCP/关节配对检查拒绝未产生预期进度的冻结反馈；但主机接收时间**不能证明设备数据源新鲜**，也无法排除“旧缓存恰好等于目标值”。T34 必须现场核实反馈更新机制/时间戳；未核实前不得宣称 stale feedback 已被完全证明可检出。
+
+离线方向分析使用仓库的 Pink/Pinocchio 环境。基座和 TCP 定义核对后，可以用 `--analyze 记录.jsonl --frames-verified --min-rotation-rad 阈值` 用记录中的同一份 URDF 读取完整的五点记录。正反向结果要同向支持同一个判定，混合结果或信号不足记为 `UNCERTAIN`。
+
+
+## 真机到位前的只读控制器预检
+
+T34 运动前，先使用探针的只读检查模式核对当前固件响应。它只依次发送 get_device_state、get_config、get_joint_position、get_tcp_pose，不发送 movej、stop_motion，也不执行使能或故障复位。
+
+~~~bash
+python3 tools/dm-exo/urdf_fk_calib/urdf_axis_probe.py \
+  /path/to/robot.urdf \
+  --inspect-controller \
+  --host YOUR_CONTROLLER_IP \
+  --port 30485 \
+  --rpc-timeout-s 1.0 \
+  --output /path/to/private-capture/controller-preflight.json
+~~~
+
+注意：
+
+- 这是**只读网络连接**，不是零连接；当前型号 TCP 30485 为单连接。执行前仍须由现场人员确认 T3 Bridge、示教 GUI 和其他客户端已释放连接。不能与遥操作同时运行。
+- 输出文件必须是新文件；内容包含四类原始响应、主机请求/接收时间和本次 URDF SHA256。某一只读请求失败时仍会保存已取得的部分响应和失败命令，不会继续查询；目录应保存在现场私有位置，公开 GitHub 只放脱敏摘要。
+- 保存并核对现场 get_device_state 完整原始响应：历史上已见 state、motorErrorDetails；本次固件仍需核对字段是否保持、错误码拼写/类型、motorErrorDetails 的 null/数组形式及状态值。历史完整健康态样本尚缺。
+- 核对 get_config 的 lowerLimits / upperLimits 是否为 14 项、顺序是否确为左七轴再右七轴、单位是否为 rad。
+- 核对 get_joint_position 的 joint 是否为 17 项，顺序是否为腰、左七轴、右七轴、头两轴，单位是否为 rad，且数据确实来自实时反馈。
+- 核对 get_tcp_pose 的 pose 是否为 14 项、左右臂顺序和四元数顺序是否与 V0.3 文档一致，并确认基座、工具帧和位置单位。
+- 该模式只保存原始响应，不替现场人员判断字段语义。任一结构不符、状态异常或反馈来源不明，保持 T34 BLOCKED；不得为通过检查而放宽执行模式的 fail-closed 校验。
