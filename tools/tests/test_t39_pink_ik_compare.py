@@ -20,6 +20,7 @@ class T39PinkIkComparisonTests(unittest.TestCase):
         )
         self.assertEqual(report["summary"]["baseline_W"]["sample_count"], 1)
         self.assertEqual(report["summary"]["csv_candidate_C"]["sample_count"], 1)
+        self.assertGreater(report["summary"]["baseline_W"]["converged_count"], report["summary"]["csv_candidate_C"]["converged_count"])
         self.assertIn("W FK", report["targets"])
         for model_name in ("baseline_W", "csv_candidate_C"):
             summary = report["summary"][model_name]
