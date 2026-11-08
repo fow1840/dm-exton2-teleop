@@ -216,7 +216,7 @@ J7 在限位外时控制器是否拒绝 movej 未验证；若 5Hz 后仍偶发�
 
 任务台账：[TASKS.md](./TASKS.md)（唯一权威状态）；GitHub Issues 用于领取、讨论、依赖交叉引用和 PR 关联。
 
-| 任务 | Issue | 初始状态 |
+| 任务 | Issue | 当前状态（2026-11-08） |
 |---|---|---|
 | T31 运行态参数与坐标系契约审计 | [#2](https://github.com/fow1840/dm-exton2-teleop/issues/2) | `status:blocked`（等待现场只读采集） |
 | T32 左右臂 URDF / CSV 运动学离线对账 | [#3](https://github.com/fow1840/dm-exton2-teleop/issues/3) | `closed / DONE` |
