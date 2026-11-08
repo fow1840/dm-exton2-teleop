@@ -1467,3 +1467,13 @@ average rate: 250.762
 - T33 状态更新为 DONE，仅表示代码/离线验收完成。没有连接控制器、没有运行只读现场预检、没有发送 movej / stop_motion / enable_robot / disable_robot / clear_fault，也没有修改现场 URDF、Bridge 或 ROS 参数。
 - T34 仍为 BLOCKED：需先完成 T31 运行态只读审计、阅读 T32 离线对账结果，核实当前控制器 get_device_state 状态机（特别是运动期间是否返回 moving/busy）、反馈新鲜度/设备时间戳、MoveJ 回执与保持值、独立停止流程；操作员在场明确批准后，才可做左臂单关节五点试采。
 - 重要边界：当前探针在设备状态故障/缺失/未知时 fail-closed，并跳过自动 stop_motion，交由现场操作员按已验证的独立停止流程处置。不能把离线模拟测试通过解释为可直接启动真机。
+
+
+## 2026-11-08 | T32 URDF / CSV 关节轴与 FK 独立复核 | GPT-6
+
+- 动作：从当前 main 读取工作区 W、产品包固定版 P、下载版 D、演示源码版 E 四份 URDF，以及四份配套 CSV 和历史 L-1 样本；使用独立 RPY/轴旋转矩阵与显式链式 FK 复算。
+- 证据：四份 CSV Git blob SHA 相同；四份 URDF 的 14 个机械臂关节 type、parent/child、origin xyz/rpy、local axis 与 W 一致（安装固定关节命名差异单独处理）。统一 base_link 世界轴 dot：左臂 J2L/J3L/J4L/J6L 为 -1，其余左轴为 +1；右臂七轴均 +1。
+- 纠错：报告中的 1193.91 mm / 167.93° 与历史样本 L-1 的 FK 完全对应，不是零关节中性位。真正 q=0 时 W/C 左末端差为 1196.80 mm / 179.9992°。样本 L-1 的 q17 左臂切片为 [1:8]，复算 W/C 1193.9109 mm / 167.9297°。
+- 交付：新增标准库离线审计脚本与回归测试，覆盖 14 轴世界方向、CSV 字节一致性、四份 URDF 运动学字段、L-1 与 q=0 的 FK 差异及 TCP 残差。CI 待新 PR 运行。
+- 未验证：控制器真实零位、左右轴物理正方向、现场 base/TCP、CSV 是否代表实际交付机器人；不得将候选符号直接写入 URDF / Bridge。
+- 现场变更：无。未连接控制器、未发送运动命令、未修改任何 URDF / CSV / Bridge / ROS 参数。
