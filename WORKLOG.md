@@ -1514,3 +1514,13 @@ average rate: 250.762
 - 同一 PR 的 T33 回归 run 42444769155 success，21/21 PASS；T32 PR #17 已合并 main，6/6 独立 FK / CSV / 世界轴测试通过（run 42444767231）。
 - 结论：T31 的源码审计和只读采集工具已可合并；现场参数、发布端、消息频率和 target/state frame_id 尚未采集，T31 继续 BLOCKED。不能把 fake ROS CLI 或历史日志当成当前现场证据。
 - 现场变更：无。未连接 ROS 主机或控制器、未发送运动命令、未写参数、未重启进程。
+
+
+## 2026-11-08 | T31 离线采集器与源码审计合并 main；现场仍 BLOCKED | GPT-6
+
+- PR #19 已合并，merge commit：d2a42c409a64decf2c23fbea5650b328e4d8ebc4。包含 T31 源码坐标契约审计、只读 ROS collector、fake ROS CLI 测试和真机到位前清单。
+- GitHub Actions run 42445126265 / job t31-offline success：3/3 tests PASS；覆盖六话题 info/sample/rate、关键 IK 参数、frame_id 样本、只读命令白名单、私有权限和 ROS_DOMAIN_ID 缺失 fail-fast。
+- 同一 PR 的 T33 回归 run 42445126267 / job t33-offline success：21/21 tests PASS。T32 PR #17 已合并 main，run 42445126234 6/6 tests PASS。
+- 源码结论：IK target_cb 不读取 PoseStamped.header.frame_id、不做 TF；FK adapter 和 IK 都可能发布 ee/state；Bridge joint_states 在反馈快照缺失时回退命令缓存。以上已写入 docs/T31运行态与坐标系审计.md。
+- T31 状态保持 BLOCKED：尚未取得当前现场 ROS_DOMAIN_ID、运行节点、运行参数、六话题 publisher/type/sample/rate 与 target/state frame_id。需现场 ROS 主机或同一 ROS 2 局域网执行只读采集器。
+- 现场变更：无。未连接控制器或 ROS 主机、未发送运动命令、未写 ROS 参数、未重启现场进程。
