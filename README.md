@@ -83,6 +83,8 @@ setsid nohup python3 /home/tc/tcvg/exton_bridge.py --ros-args \
 
 ## 五、看什么
 
+**适配与排障入口**：[外骨骼适配 FAQ 与故障排查指南](./docs/外骨骼适配FAQ与故障排查指南.md)（30 个 FAQ、12 张故障卡、只读取证、验收与报修模板）。本 README 的运行状态和命令含历史快照，现场执行以当前 TASKS、批准流程与实际运行版本为准。
+
 0. **接手先按 [AGENTS.md](./AGENTS.md) §0 走流程**：核对现场（T01）→ 认领任务（[TASKS.md](./TASKS.md)）→ 每步落账（[WORKLOG.md](./WORKLOG.md)）。
 1. **先看 [HANDOFF.md](./HANDOFF.md) §四** —— 当前唯一阻塞项（program_run_failed）的根因分析与修复方案。
 2. **[TASKS.md](./TASKS.md)** —— 9 条接手任务，带优先级、依赖、验收标准和负责人（哪些必须人工配合）。

@@ -1680,3 +1680,13 @@ average rate: 250.762
 - PR #14 head 50e2b0a 的两个 mock 反例：DEFAULT_DRY_RUN attempted controller connection calls=1；FROZEN_FEEDBACK reached=True actual_J1=0 reported_J1=0.005 target_J1=0.01 tolerance=0.008。全部 socket/运动均拦截，无真机连接。完整阻断项见 docs/PR14离线合并审查.md。决定保留 PR #14 OPEN，暂缓整体合并。
 - 本地 T33：Ran 21 tests，OK (skipped=1)，即 20 通过、1 项 Pinocchio FK 回放因未安装跳过；完整依赖回放由 PR CI 验证，未冒称本地全部通过。
 - 现场变更：无；未连接控制器、未启动现场进程、未清故障/使能/发送动作。现场 T01 未执行，现场当前状态未验证。
+
+
+## 2026-11-09 | 外骨骼适配 FAQ 与故障排查指南 | Codex
+
+- 来源基线：44d6192；核对当前 TASKS、T31 源码契约、V0.3 字段证据、URDF 验收、T39 比较、Bridge/双臂/自运动分析与 PR14 离线审查。本文归纳已有证据，不新增真机结论。
+- 交付：docs/外骨骼适配FAQ与故障排查指南.md，590 行、30 个 FAQ、12 张故障卡；包括阶段交付、接口契约、症状速查、检查/处理/复验、只读命令、量化指标、场景验收与厂家支持模板。README 与知识索引增加入口，TASKS 增加独立文档维护行，保持现场任务状态不变。
+- 区分：源码/离线/历史实测/待验证；指令/反馈/state/TCP；已合并/已部署/已验收。明确旧 T30 直接命令、多重取反与历史发送率推测不作为当前执行依据；PR14 批量运动入口不可替代 T33/T34。
+- 文档检查原文：PASS: relative links/explicit anchors: 44；PASS: fenced blocks paired: 8；PASS: bash examples syntax: 6；PASS: FAQ=30, diagnostic cards=12。git diff --check PASS。只对 bash 示例做 bash -n 语法检查，未执行现场示例，未为纯文档修改重跑算法回归。
+- 现场变更：无。未连接控制器、未执行现场 ROS 查询、未部署、未重启、未发送运动/使能/清故障命令。现场 T01/T31/T34 等状态未验证且不因文档交付解除阻塞。
+- 交付状态：独立文档分支提交 PR 供审核；指南内容完成，文档合并待审核。
