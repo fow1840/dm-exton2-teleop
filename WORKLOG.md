@@ -1680,3 +1680,38 @@ average rate: 250.762
 - PR #14 head 50e2b0a 的两个 mock 反例：DEFAULT_DRY_RUN attempted controller connection calls=1；FROZEN_FEEDBACK reached=True actual_J1=0 reported_J1=0.005 target_J1=0.01 tolerance=0.008。全部 socket/运动均拦截，无真机连接。完整阻断项见 docs/PR14离线合并审查.md。决定保留 PR #14 OPEN，暂缓整体合并。
 - 本地 T33：Ran 21 tests，OK (skipped=1)，即 20 通过、1 项 Pinocchio FK 回放因未安装跳过；完整依赖回放由 PR CI 验证，未冒称本地全部通过。
 - 现场变更：无；未连接控制器、未启动现场进程、未清故障/使能/发送动作。现场 T01 未执行，现场当前状态未验证。
+## 2026-11-10 | 左臂运行包能否验 URDF：判决「不能当 G3」+ G0/G1/G2 实跑 | ZCode
+
+- 起因：用户要求「左臂运行的数据包，做 urdf 的验证」。先判数据可用性，再跑离线三门。
+- 动作 ①（新工具 `tools/dm-exo/urdf_fk_calib/verify_bags_urdf.py`）：56 个左臂包逐条判定
+  `/target_robot/left_ee/state` 来源——对 `FK(q_ik)` 与 `FK(q_rob)` 各自算残差，位置<1mm 且
+  姿态<5° 才算匹配。
+- 证据原文（逐包输出合计）：`包数 56  state 消息总计 143976  ik路 107541 (74.69%)  rob路 968 (0.67%)
+  未匹配 35467 (24.63%)`；`press03_left_142721.npz ... vs FK(q_ik) 位置 median=0.000mm max=30.8mm
+  姿态 median=0.00°`、`vs FK(q_rob) 位置 median=6.818mm max=37.0mm 姿态 median=0.86°`；
+  判 100% 全为 ik 路的包 18 个。
+- 结论 ①：运行包里的末端 state 是 IK 用同一份 URDF 算出的指令 FK（残差恒 0.000mm），拿它反验
+  URDF 属循环论证；rob 路消息同样由该 URDF 经 TF 算出 → **56 个运行包整体不能作为 G3 真机对账数据**。
+  （另：`dir01_left.npz` 的 `/rob_v`≡`/ik_v` 为指令回声，此前已记。）
+- 动作 ②：对唯一带控制器真值的 `calib_{samples_L_1106_0943,L_drive,L2_drive}.jsonl` 复算
+  `compare_fk.py <hr_up_7dof_fixed URDF> … --side left`。
+- 证据原文：`raw  : 位置 max=   512.8mm median=   512.8mm | 姿态 max=   64.3°`（0943 五组全等）、
+  `raw  : 位置 max=  1757.5mm median=  1481.2mm | 姿态 max=  155.3°`（L_drive）、
+  `raw  : 位置 max=   945.2mm median=   493.1mm | 姿态 max=  167.0°`（L2_drive）；三份均
+  `结论：符号枚举救不回 → 轴系/零位结构性差异`。与 T20 台账「292~1895mm / 100~167°」一致。
+- 去重量化：`calib_samples_L_1106_0943` 后 4 行与首行 q 差 ≤1e-4 rad、TCP 差 ≤1e-4 m → 5 组实为
+  1 个位姿；真值独立位姿合计 **7 个**（< G3 门限 20，仅略高于粗判 6）。
+- 动作 ③（新工具 `offline_gates.py`）：G0 限位三方 / G1 结构镜像 / G2 独立 FK vs pinocchio。
+- 证据原文：G0 `结论: R 臂 全轴一致（差值≈内缩 0.02rad）`、`结论: L 臂 全轴一致`；
+  G1 `非 z 轴关节: 0（全为 [0,0,1]）`、左右臂 origin `非简单镜像/非相同`（Joint1 R z=-0.194 与
+  L z=+0.194 同 Rz=-π）；G2 `Link7L 20 随机位形：位置 max=0.000000mm 姿态 max=0.000002°`。
+- 结论 ②：左臂 URDF 桌面三门通过（限位已按 get_config−0.02 同步、结构无硬伤、实现自洽），
+  「模型=真机」仍未验——只有 G3 能给，需真机只读采 20 组。
+- 新发现（G4 红线，**未验证**）：四份 URDF 副本 md5 全不同——
+  `ros2_ws/src/hr_up_7dof_fixed` = `ca6ab8c0…`（get_config−0.02，IK 实际加载）；
+  对应远端的 `exton_ros2_retargeting_demo/src/hr_up_7dof_fixed` = `fa5415e3…`、`URDF/…-fixed` =
+  `29282cd3…` 两份仍是旧 `±2.967`；厂商原导出 = `17fb0ff6…`（0/0）。远端是否仍按旧限位跑，
+  因隧道拒绝（`ssh: connect to host 127.0.0.1 port 2222: Connection refused`）**未验证**，
+  回现场须 `md5sum` 直读核对。
+- 报告：`docs/URDF验收报告_左臂运行包_2026-11-10.md`。
+- 现场变更：无（纯本地只读分析；未连远端、未改运行代码、未下发任何运动指令）。

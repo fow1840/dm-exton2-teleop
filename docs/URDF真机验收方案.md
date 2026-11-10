@@ -141,3 +141,5 @@ URDF 真机验收报告
 | `probe_device_state.py` | get_device_state/限位/故障直读 | G0/G3 |
 | `fit_dh.py` / `ident_study.py`（未合并 PR #14） | DH 重建研究提案 | G3 判决后 |
 | `urdf_axis_probe.py`（T33/T34） | 符号层翻转表微扰探针 | 符号可救分支 |
+| `offline_gates.py`（2026-11-10） | G0 限位三方 + G1 结构/镜像 + G2 独立 FK vs pinocchio，一次跑完 | G0/G1/G2 |
+| `verify_bags_urdf.py`（2026-11-10） | 判定运行包里 `/ee_*_state` 来自 IK 指令 FK 还是反馈 FK——**用运行包验 URDF 前必跑**，0.000mm 即循环论证 | 数据可用性预检 |
